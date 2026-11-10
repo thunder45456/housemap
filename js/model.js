@@ -2,11 +2,13 @@ export const ROOFS = ['gable', 'hip', 'flat'];
 export const FACINGS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 export const TYPES = ['house', 'land'];
 
+const MAX_NUM = 1e12;
 const isBlank = (v) => v == null || (typeof v === 'string' && v.trim() === '');
 
 /** Returns {ok, value} for a number or blank (null); ok=false when not numeric. */
 function num(v) {
   if (isBlank(v)) return { ok: true, value: null };
+  if (typeof v !== 'string' && typeof v !== 'number') return { ok: false, value: null };
   const n = typeof v === 'number' ? v : Number(String(v).trim().replace(/,/g, ''));
   return Number.isFinite(n) ? { ok: true, value: n } : { ok: false, value: null };
 }
@@ -20,16 +22,16 @@ export function validateParcel(input) {
     else value[key] = r.value;
   };
 
-  const name = String(input.name ?? '').trim();
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (name.length < 1 || name.length > 120) errors.name = 'กรุณากรอกชื่อ (ไม่เกิน 120 ตัวอักษร)';
   value.name = name;
 
   if (!TYPES.includes(input.type)) errors.type = 'เลือกประเภท บ้าน หรือ ที่ดิน';
   value.type = input.type;
 
-  set('price_baht', (n) => Number.isInteger(n) && n >= 0, 'ราคาต้องเป็นจำนวนเต็มบาท ไม่ติดลบ');
-  set('usable_sqm', (n) => n > 0, 'พื้นที่ใช้สอยต้องมากกว่า 0');
-  set('land_sqm', (n) => n > 0, 'ขนาดที่ดินต้องมากกว่า 0');
+  set('price_baht', (n) => Number.isInteger(n) && n >= 0 && n <= MAX_NUM, 'ราคาต้องเป็นจำนวนเต็มบาท ไม่ติดลบ');
+  set('usable_sqm', (n) => n > 0 && n <= MAX_NUM, 'พื้นที่ใช้สอยต้องมากกว่า 0');
+  set('land_sqm', (n) => n > 0 && n <= MAX_NUM, 'ขนาดที่ดินต้องมากกว่า 0');
   set('floors', (n) => Number.isInteger(n) && n >= 1 && n <= 10, 'จำนวนชั้น 1–10');
   set('bedrooms', (n) => Number.isInteger(n) && n >= 0 && n <= 30, 'ห้องนอน 0–30');
   set('bathrooms', (n) => Number.isInteger(n) && n >= 0 && n <= 30, 'ห้องน้ำ 0–30');
@@ -43,15 +45,15 @@ export function validateParcel(input) {
   value.lat = lat;
   value.lng = lng;
 
-  const url = String(input.source_url ?? '').trim();
+  const url = typeof input.source_url === 'string' ? input.source_url.trim() : '';
   if (url && !/^https?:\/\/\S+$/i.test(url)) errors.source_url = 'ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://';
   value.source_url = url;
 
-  const by = String(input.added_by ?? '').trim();
+  const by = typeof input.added_by === 'string' ? input.added_by.trim() : '';
   if (by.length < 1 || by.length > 40) errors.added_by = 'กรุณากรอกชื่อคนเพิ่ม (ไม่เกิน 40 ตัวอักษร)';
   value.added_by = by;
 
-  value.note = String(input.note ?? '').trim().slice(0, 2000);
+  value.note = (typeof input.note === 'string' ? input.note.trim() : '').slice(0, 2000);
 
   const roof = isBlank(input.roof) ? null : input.roof;
   if (roof !== null && !ROOFS.includes(roof)) errors.roof = 'ทรงหลังคาไม่ถูกต้อง';

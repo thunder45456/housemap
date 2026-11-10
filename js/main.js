@@ -38,7 +38,7 @@ function showTrash(on) {
     renderTrash($('trash'), parcels.filter((p) => p.deleted_at), {
       getCode: () => code,
       isReadOnly: () => readOnly,
-      onChanged: async () => { await reload(); showTrash(true); },
+      onChanged: async () => { if (await reload()) showTrash(true); },
       onClose: () => showTrash(false),
       onNetworkError: () => setReadOnly(true),
     });
@@ -78,13 +78,18 @@ function ensureApp() {
 }
 
 /** Reloads from the database. Returns true on success. */
+let reloadSeq = 0;
 async function reload() {
+  const seq = ++reloadSeq;
   try {
-    parcels = await listParcels(code);
+    const data = await listParcels(code);
+    if (seq !== reloadSeq || !code) return seq === reloadSeq && !!code; // a newer reload (or logout) superseded this one
+    parcels = data;
     setReadOnly(false);
     list.setParcels(parcels);
     return true;
   } catch (e) {
+    if (seq !== reloadSeq || !code) return false;
     if (e.code === 'bad_code') logout('รหัสกลุ่มถูกเปลี่ยนแล้ว กรุณาใส่รหัสใหม่');
     else { setReadOnly(true); toast(e.message); }
     return false;
@@ -105,7 +110,12 @@ async function enter(c) {
 function logout(message = '') {
   store.clear();
   code = null;
+  reloadSeq++;
+  parcels = [];
   if (form) form.close();
+  $('trash').hidden = true;
+  $('list').hidden = false;
+  if (list) list.setParcels([]);
   $('app').hidden = true;
   showGate(enter, message);
 }
@@ -142,6 +152,7 @@ $('file-import').addEventListener('change', async (ev) => {
     try { await saveParcel(code, p, null); ok++; } catch (e) {
       failed++;
       if (e.code === 'network') { setReadOnly(true); break; }
+      if (e.code === 'bad_code') { logout('รหัสกลุ่มถูกเปลี่ยนแล้ว กรุณาใส่รหัสใหม่'); return; }
     }
   }
   await reload();

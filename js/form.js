@@ -31,15 +31,20 @@ export function initForm(root, deps) {
     return { input, unit, node: el('div', { class: 'pair' }, input, unit) };
   }
 
-  function areaValue({ input, unit }) {
+  function areaValue(ctrl) {
+    const { input, unit } = ctrl;
+    // untouched field: keep the exact stored value instead of the rounded display text
+    if (ctrl.orig && input.value === ctrl.orig.text && unit.value === ctrl.orig.unit) return ctrl.orig.sqm;
     const raw = input.value.trim().replace(/,/g, '');
     if (raw === '') return '';
     const n = Number(raw);
     return Number.isFinite(n) ? toSqm(n, unit.value) : NaN;
   }
 
-  function setArea({ input, unit }, sqm) {
+  function setArea(ctrl, sqm) {
+    const { input, unit } = ctrl;
     input.value = sqm == null ? '' : String(round4(fromSqm(sqm, unit.value)));
+    ctrl.orig = sqm == null ? null : { text: input.value, unit: unit.value, sqm };
   }
 
   function build() {
@@ -189,7 +194,7 @@ export function initForm(root, deps) {
     ctl.save.disabled = true;
     try {
       const saved = await saveParcel(deps.getCode(), p ? { ...v.value, id: p.id } : v.value, p ? p.version : null);
-      setName(v.value.added_by);
+      if (!p) setName(v.value.added_by);
       close();
       toast('บันทึกแล้ว');
       await deps.onChanged(saved.id);

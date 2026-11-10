@@ -35,13 +35,15 @@ alter table public.app_secret enable row level security;
 revoke all on public.parcels from anon, authenticated;
 revoke all on public.app_secret from anon, authenticated;
 
+create unique index if not exists app_secret_single on public.app_secret ((true));
+
 create or replace function public._check_code(p_code text)
 returns void language plpgsql security definer
 set search_path = public, extensions as $$
 begin
   if p_code is null or p_code = ''
-     or not exists (select 1 from public.app_secret
-                    where code_hash = encode(digest(p_code, 'sha256'), 'hex')) then
+     or not exists (select 1 from public.app_secret where code_hash = crypt(p_code, code_hash)) then
+    perform pg_sleep(1); -- slow down guessing
     raise exception 'bad_code';
   end if;
 end $$;

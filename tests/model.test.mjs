@@ -68,3 +68,12 @@ test('filterSort type and query and price range', () => {
   assert.deepEqual(filterSort(list, { query: 'ดอยสุเทพ', sortBy: 'price', dir: 'asc' }).map((p) => p.id), ['b']);
   assert.deepEqual(filterSort(list, { minPrice: 15, sortBy: 'price', dir: 'asc' }).map((p) => p.id), ['b']);
 });
+
+test('odd input types are rejected, not coerced', () => {
+  assert.ok(validateParcel({ ...good(), price_baht: [] }).errors.price_baht);
+  assert.ok(validateParcel({ ...good(), price_baht: {} }).errors.price_baht);
+  assert.ok(validateParcel({ ...good(), name: {} }).errors.name);
+  assert.ok(validateParcel({ ...good(), added_by: ['x'] }).errors.added_by);
+  assert.ok(validateParcel({ ...good(), price_baht: 1e30 }).errors.price_baht);
+  assert.ok(validateParcel({ ...good(), land_sqm: 1e30 }).errors.land_sqm);
+});

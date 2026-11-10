@@ -21,6 +21,7 @@ async function rpc(name, args) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(args ?? {}),
+      signal: AbortSignal.timeout(15000),
     });
   } catch (e) {
     throw new ApiError('network', 'เชื่อมต่อฐานข้อมูลไม่ได้');

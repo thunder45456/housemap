@@ -22,7 +22,8 @@
 - ถ้าฐานข้อมูลเชื่อมต่อไม่ได้ เว็บจะดูได้อย่างเดียวและแจ้งเตือนด้านบน
 
 ## สำหรับเจ้าของ (ตั้งค่าครั้งเดียว)
-- ฐานข้อมูล: Supabase แผนฟรี รัน `supabase/schema.sql` แล้ว `supabase/set_group_code.sql` (แก้ `REPLACE_ME` เป็นรหัสกลุ่ม **และไม่บันทึกกลับลงไฟล์**)
+- ฐานข้อมูล: Supabase แผนฟรี รัน `supabase/schema.sql` แล้ว `supabase/set_group_code.sql` (แก้ `REPLACE_ME` เป็นรหัสกลุ่มอย่างน้อย 8 ตัว **และไม่บันทึกกลับลงไฟล์**)
+- ถ้าตั้งไว้ก่อนมี `migrate_2_bcrypt.sql`: รันไฟล์นั้นหนึ่งครั้ง แล้วรัน `set_group_code.sql` ต่อทันที (ไม่งั้นเว็บจะปฏิเสธทุกรหัส)
 - ใส่ Project URL และ anon key ใน `js/config.js` (สองค่านี้เป็นค่าสาธารณะ ห้ามใส่ `service_role`)
 - GitHub Pages: Settings → Pages → Deploy from branch → `main` / root
 - GitHub Actions secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY` สำหรับ `keepalive.yml` (ping ทุกวัน กัน Supabase หยุดเมื่อไม่มีคนใช้)

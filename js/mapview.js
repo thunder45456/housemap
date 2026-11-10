@@ -3,8 +3,12 @@ import { formatArea, formatPrice } from './units.js';
 const CHIANG_MAI = [18.7883, 98.9853];
 const TYPE_TH = { house: 'บ้าน', land: 'ที่ดิน' };
 
-const pinIcon = (kind) =>
-  L.divIcon({ className: '', html: `<div class="pin ${kind}"></div>`, iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -20] });
+const KINDS = ['house', 'land', 'draft'];
+function pinIcon(kind) {
+  const pin = document.createElement('div');
+  pin.className = `pin ${KINDS.includes(kind) ? kind : 'house'}`;
+  return L.divIcon({ className: '', html: pin, iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -20] });
+}
 
 function popupNode(p, onEdit) {
   const box = document.createElement('div');
