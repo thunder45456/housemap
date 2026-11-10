@@ -116,11 +116,13 @@ export function initMap(el) {
         let g = zoneLayers.get(c.id);
         if (on && !g && zoneData) {
           g = L.layerGroup();
-          for (const poly of zoneData.byClass.get(c.id) ?? []) {
+          // one path per class (nonzero fill): fast, and overlapping polygons do not stack their opacity
+          const rings = (zoneData.byClass.get(c.id) ?? []).map((poly) => {
             const ll = [];
             for (let i = 0; i < poly.r.length; i += 2) ll.push([poly.r[i], poly.r[i + 1]]);
-            L.polygon(ll, { renderer: zoneCanvas, pane: 'zones', interactive: false, stroke: false, fillColor: c.color, fillOpacity: 0.4 }).addTo(g);
-          }
+            return ll;
+          });
+          if (rings.length) L.polygon(rings, { renderer: zoneCanvas, pane: 'zones', interactive: false, stroke: false, fillRule: 'nonzero', fillColor: c.color, fillOpacity: 0.4 }).addTo(g);
           zoneLayers.set(c.id, g);
         }
         if (g) { if (on) g.addTo(map); else map.removeLayer(g); }

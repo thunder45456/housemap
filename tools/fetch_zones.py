@@ -38,7 +38,10 @@ def run(query):
             try:
                 req = urllib.request.Request(ep, data=data, headers={"User-Agent": "HouseMap-zones/1.0"})
                 with urllib.request.urlopen(req, timeout=240) as r:
-                    return json.load(r)["elements"]
+                    body = json.load(r)
+                if body.get("remark"):  # HTTP 200 but the server gave up (timeout / out of memory): result may be partial
+                    raise RuntimeError(f"Overpass remark: {body['remark']}")
+                return body["elements"]
             except Exception as e:  # noqa: BLE001
                 last = e
                 print(f"  retry {ep} {attempt}: {e}", file=sys.stderr)

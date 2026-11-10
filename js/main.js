@@ -266,14 +266,16 @@ function ensureApp() {
   });
   map.setNearFn(getNear);
   map.setZoneFn(getZone);
-  loadZones().then((d) => {
+  // zone data is ~1.3 MB: fetch it after the first paint so it does not compete with the parcel list
+  const afterPaint = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 4000 }) : setTimeout(fn, 1500));
+  afterPaint(() => loadZones().then((d) => {
     zones = prepareZones(d);
     zoneCache.clear();
     map.setZones(zones);
     layersUi.setZonesAvailable(true);
     list.setZonesAvailable(true);
     list.refresh();
-  }).catch(() => { /* zone data is optional: the zone UI simply stays hidden */ });
+  }).catch(() => { /* zone data is optional: the zone UI simply stays hidden */ }));
   landmarksReady = loadLandmarks().then((items) => {
     landmarks = items;
     map.setLandmarks(items);

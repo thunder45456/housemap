@@ -39,7 +39,7 @@ export function inCoverage(lat, lng, zones) {
   return !b || (lat >= b[0] && lat <= b[2] && lng >= b[1] && lng <= b[3]);
 }
 
-/** Class id of the most specific zone containing the point (priority = ZONE_CLASSES order), or null. */
+/** Class id of the first matching zone in fixed priority order (ZONE_CLASSES order: industrial first, forest last), or null. */
 export function zoneAt(lat, lng, zones) {
   if (!zones || !zones.byClass) return null;
   for (const { id } of ZONE_CLASSES) {
