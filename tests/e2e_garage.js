@@ -24,7 +24,8 @@
   sel.value = 'no';
   sel.dispatchEvent(new Event('change', { bubbles: true }));
   $('#form form').requestSubmit();
-  await wait(4000);
+  for (let i = 0; i < 100 && !$('#form').hidden; i++) await wait(150);
+  await wait(600);
   const row = (await api.listParcels(code)).find((x) => x.id === a.id);
   out.dbGarage = row.garage;
   out.dbNearStored = !!row.near;

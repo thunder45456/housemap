@@ -10,9 +10,15 @@
   const rt = await import('./js/routing.js');
   const lm = (await (await fetch('landmarks.json')).json()).items;
   const nearA = await rt.computeNear({ lat: 18.7961, lng: 98.9680 }, lm);
-  const a = await api.saveParcel(code, { ...base, near: nearA, name: 'RT บ้านทดสอบ', lat: 18.7961, lng: 98.9680 }, null);
-  out.storedNear = !!(await api.listParcels(code)).find((x) => x.id === a.id).near;
+  const routesA = await rt.computeRoutes({ lat: 18.7961, lng: 98.9680 }, nearA);
+  const a = await api.saveParcel(code, { ...base, near: nearA, routes: routesA, name: 'RT บ้านทดสอบ', lat: 18.7961, lng: 98.9680 }, null);
+  const stored = (await api.listParcels(code)).find((x) => x.id === a.id);
+  out.storedNear = !!stored.near;
+  out.storedRoutes = Object.values(stored.routes || {}).filter(Boolean).length;
 
+  let osrmCalls = 0;
+  const realFetch = window.fetch;
+  window.fetch = (u, o) => { if (String(u).includes('router.project-osrm.org')) osrmCalls++; return realFetch(u, o); };
   $('#gate input').value = code;
   $('#gate form').requestSubmit();
   await wait(3500);
@@ -41,6 +47,7 @@
   [...rowOf().querySelectorAll('.details .actions-row button')].find((b) => b.textContent.includes('ล้าง')).click();
   await wait(300);
   out.afterClear = paths();
+  out.osrmCallsWhileDrawing = osrmCalls;
 
   rowOf().querySelector('.name').click();
   await wait(300);

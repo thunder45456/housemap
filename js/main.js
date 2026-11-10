@@ -5,8 +5,9 @@ import { initForm } from './form.js';
 import { renderTrash } from './trash.js';
 import { exportJson, planImport } from './importer.js';
 import { loadLandmarks, CATEGORIES } from './landmarks.js';
-import { fetchRoute, computeNear } from './routing.js';
-import { cleanNear, validateParcel } from './model.js';
+import { fetchRoute, computeNear, computeRoutes } from './routing.js';
+import { cleanNear, cleanRoutes, validateParcel } from './model.js';
+import { decodePolyline } from './polyline.js';
 import { geocode } from './geocode.js';
 import { loadZones, prepareZones, zoneAt, inCoverage } from './zones.js';
 import { renderAiPanel } from './aipanel.js';
@@ -30,7 +31,8 @@ let list = null;
 let form = null;
 
 // ---- road distances (stored with each parcel as `near`) ----
-const normalize = (rows) => rows.map((p) => ({ ...p, near: cleanNear(p.near) }));
+const normalize = (rows) => rows.map((p) => ({ ...p, near: cleanNear(p.near), routes: cleanRoutes(p.routes) }));
+const hasRoutes = (p) => !!p.routes && Object.values(p.routes).some(Boolean);
 const hasNear = (p) => !!p.near && Object.values(p.near).some(Boolean);
 const getNear = (p) => (hasNear(p) ? p.near : null);
 
@@ -41,17 +43,22 @@ async function computeNearFor(lat, lng) {
   return computeNear({ lat, lng }, landmarks);
 }
 
-/** For parcels saved without distances (or before this feature existed). */
+async function computeRoutesFor(lat, lng, near) {
+  return computeRoutes({ lat, lng }, near);
+}
+
+/** For parcels saved without distances or without stored routes (older parcels). */
 async function fillNear(p) {
   if (readOnly) return;
-  toast('กำลังคำนวณระยะทางถนน...');
+  toast('กำลังคำนวณ...');
   try {
-    const near = await computeNearFor(p.lat, p.lng);
-    const v = validateParcel({ ...p, near });
+    const near = hasNear(p) ? p.near : await computeNearFor(p.lat, p.lng);
+    const routes = await computeRoutesFor(p.lat, p.lng, near);
+    const v = validateParcel({ ...p, near, routes });
     if (!v.ok) { toast('ข้อมูลรายการไม่ครบ กรุณากดแก้ไขแล้วบันทึกใหม่'); return; }
     await saveParcel(code, { ...v.value, id: p.id }, p.version);
     await reload();
-    toast('คำนวณและบันทึกระยะทางแล้ว');
+    toast('บันทึกระยะทางและเส้นทางแล้ว');
   } catch (e) {
     toast(e.code === 'conflict' ? 'มีคนอื่นแก้รายการนี้แล้ว กดรีโหลดแล้วลองใหม่' : e.message);
   }
@@ -148,7 +155,11 @@ async function drawRoute(p, cat, epoch) {
   routeBusy.add(key);
   try {
     let r = routeCache.get(key);
-    if (!r) { r = await fetchRoute({ lat: p.lat, lng: p.lng }, { lat: n.lat, lng: n.lng }); routeCache.set(key, r); }
+    if (!r && p.routes?.[cat]) {
+      const coords = decodePolyline(p.routes[cat]);
+      if (coords.length >= 2) { r = { coords }; routeCache.set(key, r); }
+    }
+    if (!r) { r = await fetchRoute({ lat: p.lat, lng: p.lng }, { lat: n.lat, lng: n.lng }); routeCache.set(key, r); } // older parcels: ask the routing server
     if (epoch !== routeEpoch || routeOwner !== p.id) return; // cleared or switched parcel meanwhile
     routeShown.add(key);
     map.showRoute(key, r.coords, colorOf(cat));
@@ -274,6 +285,7 @@ function ensureApp() {
     getCode: () => code,
     isReadOnly: () => readOnly,
     computeNear: computeNearFor,
+    computeRoutes: computeRoutesFor,
     queueActive: () => aiQueue.length > 0,
     onChanged: async (id) => { resetRoutes(null); await reload(); if (id) map.focus(id); },
     onConflict: async (id) => {

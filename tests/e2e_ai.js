@@ -1,6 +1,7 @@
 // Browser E2E for AI import. __CODE__ replaced at run time.
 (async () => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const waitFor = async (fn, ms = 20000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { if (fn()) return true; } catch { /* retry */ } await wait(150); } return false; };
   const $ = (s) => document.querySelector(s);
   const out = {};
   const code = '__CODE__';
@@ -56,14 +57,16 @@
   await wait(300);
   setv(formEl('ชื่อคนเพิ่ม'), 'e2e-ai');
   $('#form form').requestSubmit();
-  await wait(3000);
+  await waitFor(() => !$('#form').hidden && formEl('ชื่อ')?.value === 'AI บ้านพิกัดครบ');
+  await wait(300);
 
   out.form2 = { title: $('#form h2')?.textContent, hidden: $('#form').hidden, name: formEl('ชื่อ')?.value,
     price: formEl('ราคา')?.value, beds: formEl('ห้องนอน')?.value, hasPin: !/ยังไม่ได้วางหมุด/.test($('#form').innerText),
     landWah: formEl('ขนาดที่ดิน')?.querySelector('input').value };
   setv(formEl('ชื่อคนเพิ่ม'), 'e2e-ai');
   $('#form form').requestSubmit();
-  await wait(3000);
+  await waitFor(() => $('#form').hidden);
+  await wait(600);
   out.after = { formHidden: $('#form').hidden, rows: names().filter((n) => n.startsWith('AI ')) };
 
   const all = await api.listParcels(code);

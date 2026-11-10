@@ -85,3 +85,38 @@ export async function computeNear(point, landmarks) {
   if (!parsed) throw new Error('คำนวณระยะทางไม่ได้');
   return pickNearest(cands, parsed);
 }
+
+// ---- storing routes with the parcel ----
+import { encodePolyline, simplifyPath } from './polyline.js';
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Simplifies a route (about 4 m) and encodes it; tightens the tolerance until it is small enough. */
+export function packRoute(coords, maxLen = 20000) {
+  let tol = 0.00004;
+  for (let i = 0; i < 6; i++) {
+    const enc = encodePolyline(simplifyPath(coords, tol));
+    if (enc.length <= maxLen) return enc;
+    tol *= 2;
+  }
+  return null;
+}
+
+/**
+ * Driving route from `point` to each stored nearest landmark -> { hospital: 'encoded'|null, ... }.
+ * One request per category (sequential, gentle on the free server). A failed category becomes null.
+ */
+export async function computeRoutes(point, near) {
+  const out = {};
+  for (const c of CATEGORIES) {
+    const n = near?.[c.id];
+    out[c.id] = null;
+    if (!n) continue;
+    try {
+      const r = await fetchRoute(point, { lat: n.lat, lng: n.lng });
+      out[c.id] = packRoute(r.coords);
+    } catch { /* leave null: the route can be fetched on demand later */ }
+    await sleep(350);
+  }
+  return out;
+}

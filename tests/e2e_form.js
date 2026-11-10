@@ -1,6 +1,7 @@
 // Browser-side E2E script for edge_check.mjs --eval. __CODE__ is replaced at run time (never commit the real code).
 (async () => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const waitFor = async (fn, ms = 20000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { if (fn()) return true; } catch { /* retry */ } await wait(150); } return false; };
   const $ = (s) => document.querySelector(s);
   const out = {};
   const code = '__CODE__';
@@ -45,7 +46,8 @@
   // 3. valid save with blank price
   setv(formEl('ลิงก์ต้นทาง'), 'https://example.com/x');
   $('#form form').requestSubmit();
-  await wait(2500);
+  await waitFor(() => $('#form').hidden);
+  await wait(600);
   out.afterSave = { formHidden: $('#form').hidden, rows: names() };
   setv($('.fpanel select:nth-child(2)'), 'price:asc');
   out.blankPriceLast = names().slice(-1)[0];

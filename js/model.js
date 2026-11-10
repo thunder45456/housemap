@@ -30,6 +30,20 @@ export function cleanNear(near) {
   return out;
 }
 
+const ROUTE_CHARS = /^[?-~]+$/;
+const MAX_ROUTE_LEN = 25000;
+
+/** Stored driving routes: only well-formed encoded-polyline strings survive, per category. */
+export function cleanRoutes(routes) {
+  if (!routes || typeof routes !== 'object' || Array.isArray(routes)) return null;
+  const out = {};
+  for (const { id } of CATEGORIES) {
+    const r = routes[id];
+    out[id] = typeof r === 'string' && r.length > 0 && r.length <= MAX_ROUTE_LEN && ROUTE_CHARS.test(r) ? r : null;
+  }
+  return out;
+}
+
 export function validateParcel(input) {
   const errors = {};
   const value = {};
@@ -81,6 +95,7 @@ export function validateParcel(input) {
 
   value.garage = input.garage === true ? true : input.garage === false ? false : null;
   value.near = cleanNear(input.near);
+  value.routes = cleanRoutes(input.routes);
 
   const ok = Object.keys(errors).length === 0;
   return ok ? { ok, errors, value } : { ok, errors };

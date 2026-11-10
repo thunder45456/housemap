@@ -47,7 +47,7 @@
 
 ## สำหรับเจ้าของ (ตั้งค่าครั้งเดียว)
 - ฐานข้อมูล: Supabase แผนฟรี รัน `supabase/schema.sql` แล้ว `supabase/set_group_code.sql` (แก้ `REPLACE_ME` เป็นรหัสกลุ่มอย่างน้อย 8 ตัว **และไม่บันทึกกลับลงไฟล์**)
-- เพิ่มคอลัมน์ระยะทาง: รัน `supabase/migrate_3_near.sql` หนึ่งครั้ง และช่องโรงรถ: `supabase/migrate_4_garage.sql` (ทำซ้ำได้ปลอดภัย ทุกครั้งเปิด New query ใหม่)
+- เพิ่มคอลัมน์ระยะทาง: รัน `supabase/migrate_3_near.sql` หนึ่งครั้ง, ช่องโรงรถ: `supabase/migrate_4_garage.sql`, เส้นทางที่เก็บไว้: `supabase/migrate_5_routes.sql` (ทำซ้ำได้ปลอดภัย ทุกครั้งเปิด New query ใหม่)
 - ถ้าตั้งไว้ก่อนมี `migrate_2_bcrypt.sql`: รันไฟล์นั้นหนึ่งครั้ง แล้วรัน `set_group_code.sql` ต่อทันที (ไม่งั้นเว็บจะปฏิเสธทุกรหัส)
 - ใส่ Project URL และ anon key ใน `js/config.js` (สองค่านี้เป็นค่าสาธารณะ ห้ามใส่ `service_role`)
 - GitHub Pages: Settings → Pages → Deploy from branch → `main` / root

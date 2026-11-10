@@ -95,7 +95,8 @@ export function initList(root, h) {
     }
     const actions = el('div', { class: 'actions-row' });
     if (canEdit?.()) actions.append(el('button', { type: 'button', class: 'btn sm', onclick: () => onEdit?.(p.id) }, icon('pencil', 14), ' แก้ไข'));
-    if (!near && canEdit?.()) actions.append(el('button', { type: 'button', class: 'btn sm', onclick: () => onComputeNear?.(p) }, icon('calc', 14), ' คำนวณระยะทาง'));
+    const needsStore = !near || !p.routes || !Object.values(p.routes).some(Boolean);
+    if (needsStore && canEdit?.()) actions.append(el('button', { type: 'button', class: 'btn sm', onclick: () => onComputeNear?.(p) }, icon('calc', 14), near ? ' บันทึกเส้นทาง' : ' คำนวณระยะทาง'));
     if (near) {
       actions.append(el('button', { type: 'button', class: 'btn sm', onclick: () => onRouteAll?.(p) }, icon('route', 14), ' ทุกเส้นทาง'));
       actions.append(el('button', { type: 'button', class: 'btn sm', onclick: () => onClearRoutes?.() }, icon('x', 14), ' ล้าง'));

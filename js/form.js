@@ -1,5 +1,5 @@
 import { el, toast } from './ui.js';
-import { validateParcel, cleanNear } from './model.js';
+import { validateParcel, cleanNear, cleanRoutes } from './model.js';
 import { toSqm, fromSqm } from './units.js';
 import { saveParcel, setDeleted } from './api.js';
 
@@ -207,11 +207,19 @@ export function initForm(root, deps) {
       let near = p && p.lat === v.value.lat && p.lng === v.value.lng && p.near && Object.values(p.near).some(Boolean) ? p.near : null;
       let nearFailed = false;
       if (!near) {
-        ctl.msg.textContent = 'กำลังคำนวณระยะทางถนน...';
+        ctl.msg.textContent = 'กำลังคำนวณระยะทาง...';
         try { near = await deps.computeNear(v.value.lat, v.value.lng); } catch { near = null; nearFailed = true; }
         ctl.msg.textContent = '';
       }
       v.value.near = cleanNear(near);
+      // routes drawn on the map are stored too, so nobody has to ask the routing server again
+      let routes = p && p.lat === v.value.lat && p.lng === v.value.lng && p.routes && Object.values(p.routes).some(Boolean) && near === p.near ? p.routes : null;
+      if (!routes && near) {
+        ctl.msg.textContent = 'กำลังคำนวณเส้นทาง...';
+        try { routes = await deps.computeRoutes(v.value.lat, v.value.lng, near); } catch { routes = null; }
+        ctl.msg.textContent = '';
+      }
+      v.value.routes = cleanRoutes(routes);
       const saved = await saveParcel(deps.getCode(), p ? { ...v.value, id: p.id } : v.value, p ? p.version : null);
       if (!p) setName(v.value.added_by);
       const fromQueue = !!cur.prefill;
