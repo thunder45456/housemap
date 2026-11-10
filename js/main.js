@@ -249,7 +249,7 @@ function ensureApp() {
     getNear,
     getZone,
   });
-  initLayersPanel($('layers'), {
+  const layersUi = initLayersPanel($('layers'), {
     onLandmarkToggle: (set) => map.showLandmarkCategories(set),
     onZoneToggle: (set) => map.showZoneClasses(set),
   });
@@ -259,8 +259,10 @@ function ensureApp() {
     zones = prepareZones(d);
     zoneCache.clear();
     map.setZones(zones);
+    layersUi.setZonesAvailable(true);
+    list.setZonesAvailable(true);
     list.refresh();
-  }).catch(() => toast('โหลดข้อมูลโซนพื้นที่ไม่ได้'));
+  }).catch(() => { /* zone data is optional: the zone UI simply stays hidden */ });
   landmarksReady = loadLandmarks().then((items) => {
     landmarks = items;
     map.setLandmarks(items);

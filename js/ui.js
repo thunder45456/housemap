@@ -155,6 +155,7 @@ export function initList(root, h) {
     refresh();
   } }, 'ล้างตัวกรอง');
 
+  zoneSel.hidden = true; // shown once zone data has loaded
   const panel = el('div', { class: 'fpanel', hidden: true }, typeSel, sortSel, minIn, maxIn, distCat, distKm, zoneSel, resetBtn);
   const badge = el('span', { class: 'badge', hidden: true });
   const filterBtn = el('button', { type: 'button', class: 'btn fbtn', 'aria-expanded': 'false', onclick: () => {
@@ -173,5 +174,6 @@ export function initList(root, h) {
     setParcels(parcels) { all = parcels; refresh(); },
     refresh,
     expand(id) { expandedId = id; refresh(); },
+    setZonesAvailable(on) { zoneSel.hidden = !on; },
   };
 }
