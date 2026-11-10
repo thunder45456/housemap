@@ -23,12 +23,14 @@
   const setv = (el, v) => { el.value = v; el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); };
 
   const rowOf = (n) => [...document.querySelectorAll('#list .row')].find((r) => r.textContent.includes(n));
-  out.nearRow = rowOf('LM ใกล้เมือง')?.querySelectorAll('.meta')[1]?.textContent;
-  out.farRow = rowOf('LM ไกลเมือง')?.querySelectorAll('.meta')[1]?.textContent;
+  const lines = (n) => { rowOf(n).querySelector('.name').click(); return null; };
+  const readLines = async (n) => { rowOf(n).querySelector('.name').click(); await wait(500); const t = [...rowOf(n).querySelectorAll('.details .line')].map((x) => x.textContent.trim()); rowOf(n).querySelector('.name').click(); await wait(200); return t; };
+  out.nearRow = await readLines('LM ใกล้เมือง');
+  out.farRow = await readLines('LM ไกลเมือง');
 
-  const selects = document.querySelectorAll('.filters select');
+  const selects = document.querySelectorAll('.fpanel select');
   const distSel = selects[2];
-  const distKm = document.querySelector('.filters input[placeholder*=กม]');
+  const distKm = document.querySelector('.fpanel input[placeholder*="ก.ม."]');
   setv(distSel, 'hospital');
   setv(distKm, '3');
   out.within3kmHospital = names().filter((n) => n.startsWith('LM'));
@@ -37,23 +39,23 @@
   setv(distKm, '');
   out.filterOff = names().filter((n) => n.startsWith('LM'));
   setv(distSel, '');
-  out.noNearRow = rowOf('LM ไม่มีระยะ')?.querySelectorAll('.meta')[1]?.textContent;
   rowOf('LM ไม่มีระยะ').querySelector('.name').click();
   await wait(500);
-  const fillBtn = [...rowOf('LM ไม่มีระยะ').querySelectorAll('.details button')].find((x) => x.textContent === 'คำนวณระยะทาง');
+  out.noNearLines = [...rowOf('LM ไม่มีระยะ').querySelectorAll('.details .line')].map((x) => x.textContent.trim());
+  const fillBtn = [...rowOf('LM ไม่มีระยะ').querySelectorAll('.details button')].find((x) => x.textContent.includes('คำนวณระยะทาง'));
   out.fillButtonShown = !!fillBtn;
   fillBtn.click();
   await wait(5000);
   out.filledInDb = !!(await api.listParcels(code)).find((x) => x.id === c.id).near;
-  out.filledInRow = rowOf('LM ไม่มีระยะ')?.textContent.includes('ระยะถนน:');
+  out.filledInRow = [...rowOf('LM ไม่มีระยะ').querySelectorAll('.details .line.route')].length;
 
   // popup shows nearest list
-  rowOf('LM ใกล้เมือง').click();
+  rowOf('LM ใกล้เมือง').querySelector('.name').click();
   await wait(900);
-  out.popupNear = $('.leaflet-popup-content .near')?.innerText;
+  out.popupNear = $('.leaflet-popup-content')?.innerText;
 
   // toggles draw markers on the canvas layer
-  const cb = [...document.querySelectorAll('.toggles input')];
+  const cb = [...document.querySelectorAll('#layers input')].slice(0, 4);
   out.toggleCount = cb.length;
   cb[0].click(); cb[3].click();
   await wait(1200);

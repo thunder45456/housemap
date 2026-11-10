@@ -17,7 +17,21 @@ export function formatPrice(baht) {
   return `฿${Math.round(baht).toLocaleString('en-US')}`;
 }
 
-const trim =(n) => String(Math.round(n * 100) / 100);
+/** Short price for list rows: 3500000 -> ฿3.5M, 950000 -> ฿950k, 999 -> ฿999. */
+export function formatPriceShort(baht) {
+  if (baht == null || !Number.isFinite(baht)) return '-';
+  if (baht >= 1_000_000) return `฿${(+(baht / 1_000_000).toFixed(2)).toLocaleString('en-US')}M`;
+  if (baht >= 1_000) return `฿${+(baht / 1_000).toFixed(1)}k`;
+  return `฿${Math.round(baht)}`;
+}
+
+/** Floor area is always shown in square metres (never ตร.วา). */
+export function formatSqm(sqm) {
+  if (sqm == null || !Number.isFinite(sqm)) return '-';
+  return `${+sqm.toFixed(2)} ตร.ม.`;
+}
+
+const trim = (n) => String(Math.round(n * 100) / 100);
 
 export function formatArea(sqm) {
   if (sqm == null || !Number.isFinite(sqm)) return '-';

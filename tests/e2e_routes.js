@@ -22,23 +22,23 @@
   await wait(700);
   const d = rowOf().querySelector('.details');
   out.detailsAfter = !!d;
-  out.detailsText = d?.innerText.split('\n').slice(0, 8);
+  out.detailsText = [...d.querySelectorAll('.line')].map((x) => x.textContent.trim());
   out.linkOk = d?.querySelector('a')?.href;
   const paths = () => [...document.querySelectorAll('.leaflet-overlay-pane svg path')].map((p) => p.getAttribute('stroke')).filter((c) => c && c !== '#fff');
 
-  const btns = () => [...rowOf().querySelectorAll('.route button')];
+  const btns = () => [...rowOf().querySelectorAll('.line.route .rbtn')];
   out.routeButtons = btns().length;
   btns()[0].click();
   await wait(4000);
-  out.afterOne = { strokes: paths(), text: rowOf().querySelector('.route .rtext').textContent, btn: btns()[0].textContent };
+  out.afterOne = { strokes: paths(), text: rowOf().querySelector('.line.route .t').textContent, on: btns()[0].classList.contains('on') };
   btns()[0].click();
   await wait(300);
   out.afterHide = paths();
 
-  [...rowOf().querySelectorAll('.details .buttons button')].find((b) => b.textContent === 'แสดงทุกเส้นทาง').click();
+  [...rowOf().querySelectorAll('.details .actions-row button')].find((b) => b.textContent.includes('ทุกเส้นทาง')).click();
   await wait(9000);
   out.afterAll = [...new Set(paths())];
-  [...rowOf().querySelectorAll('.details .buttons button')].find((b) => b.textContent === 'ล้างเส้นทาง').click();
+  [...rowOf().querySelectorAll('.details .actions-row button')].find((b) => b.textContent.includes('ล้าง')).click();
   await wait(300);
   out.afterClear = paths();
 

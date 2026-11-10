@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HouseMap – บ้านและที่ดินที่น่าสนใจ</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E%F0%9F%8F%A0%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha384-c6Rcwz4e4CITMbu/NBmnNS8yN2sC3cUElMEMfP3vqqKFp7GOYaaBBCqmaWBjmkjb" crossorigin="anonymous">
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -15,23 +18,30 @@
     <h1>HouseMap</h1>
     <span id="banner" class="banner" hidden></span>
     <nav class="actions">
-      <button id="btn-add" type="button">+ เพิ่มรายการ</button>
-      <button id="btn-ai" type="button">นำเข้าด้วย AI</button>
-      <button id="btn-reload" type="button">รีโหลด</button>
-      <button id="btn-trash" type="button">ถังขยะ</button>
-      <button id="btn-export" type="button">ส่งออก JSON</button>
-      <button id="btn-import" type="button">นำเข้า JSON</button>
+      <button id="btn-add" type="button" class="btn primary" data-icon="plus"><span>Add</span></button>
+      <button id="btn-ai" type="button" class="btn" data-icon="sparkles"><span>AI prompt</span></button>
+      <button id="btn-reload" type="button" class="btn" data-icon="refresh"><span>Reload</span></button>
+      <button id="btn-trash" type="button" class="btn" data-icon="trash"><span>Bin</span></button>
+      <span class="sep" aria-hidden="true"></span>
+      <button id="btn-export" type="button" class="btn icon" data-icon="download" data-icon-size="18" title="Export JSON" aria-label="Export JSON"></button>
+      <button id="btn-import" type="button" class="btn icon" data-icon="upload" data-icon-size="18" title="Import JSON" aria-label="Import JSON"></button>
       <input id="file-import" type="file" accept="application/json,.json" hidden>
-      <button id="btn-logout" type="button" class="link">ออกจากระบบ</button>
+      <button id="btn-logout" type="button" class="btn icon" data-icon="logout" data-icon-size="18" title="ออกจากระบบ" aria-label="ออกจากระบบ"></button>
     </nav>
   </header>
   <main class="main">
-    <div id="map" class="map"></div>
-    <aside class="side">
-      <section id="list" class="list"></section>
-      <section id="form" class="form" hidden></section>
-      <section id="ai" class="form" hidden></section>
-      <section id="trash" class="list" hidden></section>
+    <div class="mapwrap">
+      <div id="map" class="map"></div>
+      <div id="layers" class="layers"></div>
+    </div>
+    <aside id="side" class="side" data-sheet="half">
+      <button id="sheet-handle" type="button" class="handle" aria-label="ขยายหรือย่อรายการ"><span></span></button>
+      <div class="sidebody">
+        <section id="list" class="list"></section>
+        <section id="form" class="form" hidden></section>
+        <section id="ai" class="form" hidden></section>
+        <section id="trash" class="list" hidden></section>
+      </div>
     </aside>
   </main>
 </div>

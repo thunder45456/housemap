@@ -79,6 +79,7 @@ export function validateParcel(input) {
   if (facing !== null && !FACINGS.includes(facing)) errors.facing = 'ทิศไม่ถูกต้อง';
   value.facing = facing;
 
+  value.garage = input.garage === true ? true : input.garage === false ? false : null;
   value.near = cleanNear(input.near);
 
   const ok = Object.keys(errors).length === 0;
@@ -88,7 +89,7 @@ export function validateParcel(input) {
 const SORT_KEY = { price: 'price_baht', land: 'land_sqm', usable: 'usable_sqm', created: 'created_at' };
 
 export function filterSort(parcels, opts = {}) {
-  const { type = 'all', minPrice, maxPrice, query, sortBy = 'created', dir = 'desc', dist } = opts;
+  const { type = 'all', minPrice, maxPrice, query, sortBy = 'created', dir = 'desc', dist, zone } = opts;
   const distOn = dist && dist.category && Number.isFinite(dist.maxKm) && typeof dist.distOf === 'function';
   const q = query ? query.trim().toLowerCase() : '';
   const hit = (p) =>
@@ -97,6 +98,7 @@ export function filterSort(parcels, opts = {}) {
     (minPrice == null || (p.price_baht != null && p.price_baht >= minPrice)) &&
     (maxPrice == null || (p.price_baht != null && p.price_baht <= maxPrice)) &&
     (!q || [p.name, p.note, p.added_by].some((s) => String(s ?? '').toLowerCase().includes(q))) &&
+    (!zone || !zone.id || (zone.zoneOf(p) ?? 'unknown') === zone.id) &&
     (!distOn || (() => { const km = dist.distOf(p, dist.category); return km != null && km <= dist.maxKm; })());
 
   const key = SORT_KEY[sortBy] ?? 'created_at';

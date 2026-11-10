@@ -1,5 +1,7 @@
-import { formatArea, formatPrice } from './units.js';
-import { CATEGORIES, formatKm } from './landmarks.js';
+import { infoLines } from './info.js';
+import { icon } from './icons.js';
+import { CATEGORIES } from './landmarks.js';
+import { ZONE_CLASSES } from './zones.js';
 
 const CHIANG_MAI = [18.7883, 98.9853];
 const TYPE_TH = { house: 'บ้าน', land: 'ที่ดิน' };
@@ -11,31 +13,23 @@ function pinIcon(kind) {
   return L.divIcon({ className: '', html: pin, iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -20] });
 }
 
-function popupNode(p, onEdit, near) {
+function popupNode(p, onEdit, near, zone) {
   const box = document.createElement('div');
-  const line = (text, bold) => {
-    const d = document.createElement(bold ? 'strong' : 'div');
-    d.textContent = text;
+  const name = document.createElement('div');
+  name.className = 'pname';
+  name.textContent = p.name;
+  box.appendChild(name);
+  for (const l of infoLines(p, { near, zone })) {
+    if (l.key === 'note') continue; // notes live in the list; keep the popup short
+    const d = document.createElement('div');
+    d.className = `pl${l.key === 'by' ? ' sub' : ''}`;
+    d.textContent = l.text;
     box.appendChild(d);
-    if (bold) box.appendChild(document.createElement('br'));
-  };
-  line(p.name, true);
-  line(`${TYPE_TH[p.type] ?? p.type} · ${formatPrice(p.price_baht)}`);
-  if (p.type === 'house') line(`ใช้สอย ${formatArea(p.usable_sqm)} · ที่ดิน ${formatArea(p.land_sqm)}`);
-  else line(`ที่ดิน ${formatArea(p.land_sqm)}`);
-  line(`เพิ่มโดย ${p.added_by}`);
-  if (near) {
-    const parts = CATEGORIES.filter((c) => near[c.id]).map((c) => `${c.short} ${formatKm(near[c.id].km)} กม. (${near[c.id].name})`);
-    if (parts.length) {
-      const d = document.createElement('div');
-      d.className = 'near';
-      parts.forEach((t) => { const r = document.createElement('div'); r.textContent = t; d.appendChild(r); });
-      box.appendChild(d);
-    }
   }
   const b = document.createElement('button');
   b.type = 'button';
-  b.textContent = 'แก้ไข';
+  b.className = 'btn sm';
+  b.append(icon('pencil', 14), ' แก้ไข');
   b.addEventListener('click', () => onEdit(p.id));
   box.appendChild(b);
   return box;
@@ -54,6 +48,13 @@ export function initMap(el) {
   let clickCb = () => {};
   let editCb = () => {};
   let nearFn = () => null;
+  let zoneFn = () => undefined;
+  let zoneData = null;
+  let wantedZones = new Set();
+  const zoneLayers = new Map(); // class id -> LayerGroup
+  map.createPane('zones');
+  map.getPane('zones').style.zIndex = 350; // under pins, above tiles
+  const zoneCanvas = L.canvas({ pane: 'zones', padding: 0.3 });
   const canvas = L.canvas({ padding: 0.3 });
   const lmLayers = new Map(); // category -> LayerGroup
   let lmItems = [];
@@ -74,7 +75,7 @@ export function initMap(el) {
       markers.clear();
       for (const p of parcels) {
         const m = L.marker([p.lat, p.lng], { icon: pinIcon(p.type) });
-        m.bindPopup(() => popupNode(p, (id) => editCb(id), nearFn(p)), { autoPan: true });
+        m.bindPopup(() => popupNode(p, (id) => editCb(id), nearFn(p), zoneFn(p)), { autoPan: true });
         m.on('popupopen', () => { openId = p.id; });
         m.on('popupclose', () => { if (!rebuilding && openId === p.id) openId = null; });
         m.on('click', () => markerCb(p.id));
@@ -100,6 +101,31 @@ export function initMap(el) {
     onMapClick: (cb) => { clickCb = cb; },
     onEdit: (cb) => { editCb = cb; },
     setNearFn: (fn) => { nearFn = fn; },
+    setZoneFn: (fn) => { zoneFn = fn; },
+    setZones(data) {
+      zoneData = data;
+      for (const g of zoneLayers.values()) map.removeLayer(g);
+      zoneLayers.clear();
+      this.showZoneClasses(wantedZones); // toggles ticked before the data arrived
+    },
+    /** visible: Set of zone class ids to draw (polygon layers are built lazily per class) */
+    showZoneClasses(visible) {
+      wantedZones = visible;
+      for (const c of ZONE_CLASSES) {
+        const on = visible.has(c.id);
+        let g = zoneLayers.get(c.id);
+        if (on && !g && zoneData) {
+          g = L.layerGroup();
+          for (const poly of zoneData.byClass.get(c.id) ?? []) {
+            const ll = [];
+            for (let i = 0; i < poly.r.length; i += 2) ll.push([poly.r[i], poly.r[i + 1]]);
+            L.polygon(ll, { renderer: zoneCanvas, pane: 'zones', interactive: false, stroke: false, fillColor: c.color, fillOpacity: 0.4 }).addTo(g);
+          }
+          zoneLayers.set(c.id, g);
+        }
+        if (g) { if (on) g.addTo(map); else map.removeLayer(g); }
+      }
+    },
     showRoute(key, coords, color) {
       this.hideRoute(key);
       const line = L.polyline(coords, { color, weight: 5, opacity: 0.85 }).addTo(map);

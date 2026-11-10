@@ -8,7 +8,10 @@ import { loadLandmarks, CATEGORIES } from './landmarks.js';
 import { fetchRoute, computeNear } from './routing.js';
 import { cleanNear, validateParcel } from './model.js';
 import { geocode } from './geocode.js';
+import { loadZones, prepareZones, zoneAt, inCoverage } from './zones.js';
 import { renderAiPanel } from './aipanel.js';
+import { initLayersPanel } from './layers.js';
+import { decorate } from './icons.js';
 
 const CODE_KEY = 'housemap.code';
 const $ = (id) => document.getElementById(id);
@@ -54,6 +57,17 @@ async function fillNear(p) {
   }
 }
 
+// ---- land-use zones (OpenStreetMap) ----
+let zones = null;
+const zoneCache = new Map();
+/** undefined = zone data not loaded yet; null = inside the fetched area but no zone mapped; 'outside' = area not fetched */
+function getZone(p) {
+  if (!zones) return undefined;
+  const key = `${p.id}:${p.lat},${p.lng}`;
+  if (!zoneCache.has(key)) zoneCache.set(key, inCoverage(p.lat, p.lng, zones) ? zoneAt(p.lat, p.lng, zones) : 'outside');
+  return zoneCache.get(key);
+}
+
 // ---- AI import queue ----
 let aiQueue = [];
 let aiIndex = 0;
@@ -92,6 +106,7 @@ async function nextAi() {
 
 function openAiPanel() {
   if (readOnly) return;
+  setSheet('full');
   abortAi();
   form.close();
   $('trash').hidden = true;
@@ -179,6 +194,7 @@ function setReadOnly(on) {
 function showTrash(on) {
   $('trash').hidden = !on;
   if (on) {
+    setSheet('full');
     abortAi();
     form.close();
     $('list').hidden = true;
@@ -196,15 +212,28 @@ function showTrash(on) {
 
 function editParcel(id) {
   const p = parcels.find((x) => x.id === id);
-  if (p && !readOnly) { abortAi(); $('trash').hidden = true; form.openEdit(p); }
+  if (p && !readOnly) { setSheet('half'); abortAi(); $('trash').hidden = true; form.openEdit(p); }
 }
+
+// ---- bottom sheet (phone layout; on desktop the handle is hidden and these states have no effect) ----
+const SHEET_CYCLE = ['half', 'full', 'mini'];
+function setSheet(state) {
+  const side = $('side');
+  if (side.dataset.sheet === state) return;
+  side.dataset.sheet = state;
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 50); // let Leaflet re-measure the map
+}
+$('sheet-handle').addEventListener('click', () => {
+  const cur = $('side').dataset.sheet;
+  setSheet(SHEET_CYCLE[(SHEET_CYCLE.indexOf(cur) + 1) % SHEET_CYCLE.length]);
+});
 
 function ensureApp() {
   $('app').hidden = false;
   if (map) return;
   map = initMap($('map'));
   list = initList($('list'), {
-    onSelect: (id) => { if (id) map.focus(id); if (id !== routeOwner) resetRoutes(id); },
+    onSelect: (id) => { if (id) { setSheet('half'); map.focus(id); } if (id !== routeOwner) resetRoutes(id); },
     onRoute: toggleRoute,
     onRouteAll: showAllRoutes,
     onClearRoutes: clearRoutes,
@@ -218,9 +247,20 @@ function ensureApp() {
     },
     onVisible: (visible) => map.setParcels(visible),
     getNear,
+    getZone,
+  });
+  initLayersPanel($('layers'), {
     onLandmarkToggle: (set) => map.showLandmarkCategories(set),
+    onZoneToggle: (set) => map.showZoneClasses(set),
   });
   map.setNearFn(getNear);
+  map.setZoneFn(getZone);
+  loadZones().then((d) => {
+    zones = prepareZones(d);
+    zoneCache.clear();
+    map.setZones(zones);
+    list.refresh();
+  }).catch(() => toast('โหลดข้อมูลโซนพื้นที่ไม่ได้'));
   landmarksReady = loadLandmarks().then((items) => {
     landmarks = items;
     map.setLandmarks(items);
@@ -295,7 +335,7 @@ function logout(message = '') {
   showGate(enter, message);
 }
 
-$('btn-add').addEventListener('click', () => { abortAi(); $('trash').hidden = true; $('ai').hidden = true; form.openNew(); });
+$('btn-add').addEventListener('click', () => { setSheet('half'); abortAi(); $('trash').hidden = true; $('ai').hidden = true; form.openNew(); });
 $('btn-ai').addEventListener('click', openAiPanel);
 $('btn-reload').addEventListener('click', async () => { if (await reload() && !$('trash').hidden) showTrash(true); });
 $('btn-trash').addEventListener('click', () => showTrash($('trash').hidden));
@@ -334,6 +374,8 @@ $('file-import').addEventListener('change', async (ev) => {
   await reload();
   toast(`นำเข้าสำเร็จ ${ok}${failed ? ` / ไม่สำเร็จ ${failed}` : ''}`);
 });
+
+decorate(); // icons on the toolbar buttons
 
 const remembered = store.get();
 if (remembered) {

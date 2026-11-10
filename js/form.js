@@ -57,29 +57,28 @@ export function initForm(root, deps) {
     ctl.floors = el('input', { type: 'text', inputMode: 'numeric' });
     ctl.beds = el('input', { type: 'text', inputMode: 'numeric' });
     ctl.baths = el('input', { type: 'text', inputMode: 'numeric' });
+    ctl.garage = el('select', {}, el('option', { value: '', textContent: 'ไม่ระบุ' }), el('option', { value: 'yes', textContent: 'มี' }), el('option', { value: 'no', textContent: 'ไม่มี' }));
     ctl.url = el('input', { type: 'text', placeholder: 'https://...' });
     ctl.note = el('textarea', { rows: 3 });
     ctl.by = el('input', { type: 'text', maxLength: 40 });
     ctl.loc = el('div', { class: 'meta' });
-    ctl.hint = el('div', { class: 'meta' });
+    ctl.hint = el('div', { class: 'meta hint' });
     ctl.msg = el('div', { class: 'err' });
-    ctl.save = el('button', { type: 'submit', class: 'primary', textContent: 'บันทึก' });
-    ctl.cancel = el('button', { type: 'button', textContent: 'ยกเลิก', onclick: () => { const q = !!current?.prefill; close(); if (q) deps.onFinished?.(false); } });
-    ctl.stopQueue = el('button', { type: 'button', textContent: 'หยุดนำเข้าที่เหลือ', hidden: true, onclick: () => { close(); deps.onAbortQueue?.(); } });
-    ctl.del = el('button', { type: 'button', class: 'danger', textContent: 'ลบ', onclick: onDelete });
-    ctl.conflict = el('button', { type: 'button', textContent: 'โหลดข้อมูลล่าสุด', hidden: true });
+    ctl.save = el('button', { type: 'submit', class: 'btn primary', textContent: 'บันทึก' });
+    ctl.cancel = el('button', { type: 'button', class: 'btn', textContent: 'ยกเลิก', onclick: () => { const q = !!current?.prefill; close(); if (q) deps.onFinished?.(false); } });
+    ctl.stopQueue = el('button', { type: 'button', class: 'btn', textContent: 'หยุดนำเข้าที่เหลือ', hidden: true, onclick: () => { close(); deps.onAbortQueue?.(); } });
+    ctl.del = el('button', { type: 'button', class: 'btn danger', textContent: 'ลบ', onclick: onDelete });
+    ctl.conflict = el('button', { type: 'button', class: 'btn', textContent: 'โหลดข้อมูลล่าสุด', hidden: true });
 
     const form = el('form', { noValidate: true },
       ctl.title,
-      field('ประเภท', 'type', ctl.type),
       field('ชื่อ', 'name', ctl.name),
-      field('ราคา (บาท)', 'price_baht', ctl.price),
-      field('พื้นที่ใช้สอย', 'usable_sqm', ctl.usable.node),
+      el('div', { class: 'grid2' }, field('ประเภท', 'type', ctl.type), field('ราคา (บาท)', 'price_baht', ctl.price)),
       field('ขนาดที่ดิน', 'land_sqm', ctl.land.node),
-      field('จำนวนชั้น', 'floors', ctl.floors),
-      field('ห้องนอน', 'bedrooms', ctl.beds),
-      field('ห้องน้ำ', 'bathrooms', ctl.baths),
-      el('div', {}, el('label', { textContent: 'ตำแหน่ง (คลิกบนแผนที่เพื่อวางหมุด แล้วลากปรับได้)' }), ctl.loc, ctl.hint, (errEls.lat = el('div', { class: 'err' }))),
+      field('พื้นที่ใช้สอย', 'usable_sqm', ctl.usable.node),
+      el('div', { class: 'grid3' }, field('ชั้น', 'floors', ctl.floors), field('ห้องนอน', 'bedrooms', ctl.beds), field('ห้องน้ำ', 'bathrooms', ctl.baths)),
+      field('โรงรถ', 'garage', ctl.garage),
+      el('div', {}, el('label', { textContent: 'ตำแหน่ง · คลิกบนแผนที่เพื่อวางหมุด' }), ctl.loc, ctl.hint, (errEls.lat = el('div', { class: 'err' }))),
       field('ลิงก์ต้นทาง', 'source_url', ctl.url),
       field('หมายเหตุ', 'note', ctl.note),
       field('ชื่อคนเพิ่ม', 'added_by', ctl.by),
@@ -139,6 +138,7 @@ export function initForm(root, deps) {
     ctl.floors.value = src?.floors ?? '';
     ctl.beds.value = src?.bedrooms ?? '';
     ctl.baths.value = src?.bathrooms ?? '';
+    ctl.garage.value = src?.garage === true ? 'yes' : src?.garage === false ? 'no' : '';
     ctl.url.value = src?.source_url ?? '';
     ctl.note.value = prefill?.address ? `ที่อยู่: ${prefill.address}${src?.note ? '\n' + src.note : ''}` : (src?.note ?? '');
     ctl.by.value = parcel ? parcel.added_by : getName();
@@ -188,6 +188,7 @@ export function initForm(root, deps) {
       type: ctl.type.value, name: ctl.name.value, price_baht: ctl.price.value,
       usable_sqm: areaValue(ctl.usable), land_sqm: areaValue(ctl.land),
       floors: ctl.floors.value, bedrooms: ctl.beds.value, bathrooms: ctl.baths.value,
+      garage: ctl.garage.value === 'yes' ? true : ctl.garage.value === 'no' ? false : null,
       source_url: ctl.url.value, note: ctl.note.value, added_by: ctl.by.value,
       lat: current.lat ?? NaN, lng: current.lng ?? NaN,
       roof: p?.roof ?? current.prefill?.values?.roof ?? null, facing: p?.facing ?? current.prefill?.values?.facing ?? null,
@@ -228,11 +229,11 @@ export function initForm(root, deps) {
   async function onDelete() {
     const p = current?.parcel;
     if (!p || deps.isReadOnly()) return;
-    if (!confirm(`ลบ "${p.name}" ใช่ไหม? (กู้คืนได้จากถังขยะ)`)) return;
+    if (!confirm(`ลบ "${p.name}" ใช่ไหม? (กู้คืนได้จาก Bin)`)) return;
     try {
       await setDeleted(deps.getCode(), p.id, true, p.version);
       close();
-      toast('ย้ายไปถังขยะแล้ว');
+      toast('ย้ายไป Bin แล้ว');
       await deps.onChanged();
     } catch (e) {
       handleApiError(e);

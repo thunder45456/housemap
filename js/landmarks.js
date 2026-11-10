@@ -31,7 +31,8 @@ export function nearestCandidates(point, items, perCategory = 5) {
   return out;
 }
 
-export const formatKm = (km) => (km < 10 ? km.toFixed(1) : String(Math.round(km)));
+/** 2 -> '2', 5.43 -> '5.4', 12.7 -> '13' (no trailing .0). */
+export const formatKm = (km) => String(km < 10 ? +km.toFixed(1) : Math.round(km));
 
 export async function loadLandmarks(url = 'landmarks.json') {
   const res = await fetch(url);

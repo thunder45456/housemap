@@ -5,12 +5,12 @@ import { setDeleted } from './api.js';
 export function renderTrash(root, deleted, deps) {
   root.replaceChildren(
     el('div', { class: 'buttons' },
-      el('h2', { textContent: `ถังขยะ (${deleted.length})` }),
-      el('button', { type: 'button', textContent: 'กลับ', onclick: deps.onClose })));
-  if (deleted.length === 0) root.append(el('div', { class: 'empty', textContent: 'ถังขยะว่าง' }));
+      el('h2', { textContent: `Bin (${deleted.length})` }),
+      el('button', { type: 'button', class: 'btn sm', textContent: 'กลับ', onclick: deps.onClose })));
+  if (deleted.length === 0) root.append(el('div', { class: 'empty', textContent: 'Bin ว่าง' }));
   for (const p of deleted) {
     const btn = el('button', {
-      type: 'button', textContent: 'กู้คืน', disabled: deps.isReadOnly(),
+      type: 'button', class: 'btn sm', textContent: 'กู้คืน', disabled: deps.isReadOnly(),
       onclick: async () => {
         btn.disabled = true;
         try {

@@ -18,6 +18,7 @@ export function buildPrompt() {
   "floors": จำนวนชั้น,
   "bedrooms": ห้องนอน,
   "bathrooms": ห้องน้ำ,
+  "garage": true ถ้ามีโรงรถหรือที่จอดรถในบ้าน, false ถ้าระบุว่าไม่มี, null ถ้าไม่ระบุ,
   "address_text": "ที่อยู่หรือที่ตั้งตามประกาศ เช่น ตำบล อำเภอ จังหวัด ถนน ชื่อหมู่บ้าน",
   "lat": ละติจูด ถ้าประกาศระบุพิกัดเท่านั้น ไม่เช่นนั้น null,
   "lng": ลองจิจูด ถ้าประกาศระบุพิกัดเท่านั้น ไม่เช่นนั้น null,
@@ -89,8 +90,10 @@ export function extractItems(text) {
 function toNum(v) {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
   if (typeof v !== 'string') return null;
-  const m = v.replace(/,/g, '').trim().match(/^(-?\d+(?:\.\d+)?)\s*(ล้าน)?/);
-  return m ? Number(m[1]) * (m[2] ? 1e6 : 1) : null;
+  const m = v.replace(/[,฿]/g, '').trim().match(/^(-?\d+(?:\.\d+)?)\s*(ล้าน|m|พัน|k)?/i);
+  if (!m) return null;
+  const unit = (m[2] ?? '').toLowerCase();
+  return Number(m[1]) * (unit === 'ล้าน' || unit === 'm' ? 1e6 : unit === 'พัน' || unit === 'k' ? 1e3 : 1);
 }
 const toInt = (v) => { const n = toNum(v); return n === null ? null : Math.round(n); };
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -123,6 +126,9 @@ export function normalizeItem(raw) {
   const lng = toNum(raw.lng);
   const hasCoords = inThailand(lat, lng);
 
+  const g = raw.garage;
+  const garage = g === true || (typeof g === 'string' && /^(true|yes|มี)$/i.test(g.trim())) ? true
+    : g === false || (typeof g === 'string' && /^(false|no|ไม่มี)$/i.test(g.trim())) ? false : null;
   const price = toNum(raw.price_baht);
   return {
     values: {
@@ -134,6 +140,7 @@ export function normalizeItem(raw) {
       floors: toInt(raw.floors),
       bedrooms: toInt(raw.bedrooms),
       bathrooms: toInt(raw.bathrooms),
+      garage,
       source_url: str(raw.source_url, 500),
       note: str(raw.note, 2000),
       roof,

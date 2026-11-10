@@ -86,3 +86,12 @@ test('extractItems does not hang on thousands of unbalanced brackets', () => {
   assert.ok(r.error);
   assert.ok(Date.now() - t0 < 1500, 'too slow');
 });
+
+test('price strings: ล้าน, พัน, M and k are understood', () => {
+  const price = (v) => normalizeItem({ price_baht: v }).values.price_baht;
+  assert.equal(price('3.5M'), 3500000);
+  assert.equal(price('3.5 m'), 3500000);
+  assert.equal(price('950k'), 950000);
+  assert.equal(price('950 พัน'), 950000);
+  assert.equal(price('฿2,500,000'), 2500000);
+});
