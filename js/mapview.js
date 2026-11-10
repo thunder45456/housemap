@@ -57,6 +57,7 @@ export function initMap(el) {
   const canvas = L.canvas({ padding: 0.3 });
   const lmLayers = new Map(); // category -> LayerGroup
   let lmItems = [];
+  const routeLayers = new Map(); // key -> polyline
   let draft = null;
 
   map.on('click', (e) => clickCb(e.latlng.lat, e.latlng.lng));
@@ -84,6 +85,21 @@ export function initMap(el) {
     onMapClick: (cb) => { clickCb = cb; },
     onEdit: (cb) => { editCb = cb; },
     setNearFn: (fn) => { nearFn = fn; },
+    showRoute(key, coords, color) {
+      this.hideRoute(key);
+      const line = L.polyline(coords, { color, weight: 5, opacity: 0.85 }).addTo(map);
+      routeLayers.set(key, line);
+      const group = L.featureGroup([...routeLayers.values()]);
+      map.fitBounds(group.getBounds(), { padding: [40, 40], maxZoom: 16 });
+    },
+    hideRoute(key) {
+      const l = routeLayers.get(key);
+      if (l) { map.removeLayer(l); routeLayers.delete(key); }
+    },
+    clearRoutes() {
+      for (const l of routeLayers.values()) map.removeLayer(l);
+      routeLayers.clear();
+    },
     setLandmarks(items) {
       lmItems = items;
       for (const g of lmLayers.values()) map.removeLayer(g);

@@ -1,6 +1,7 @@
 import { filterSort } from './model.js';
 import { formatArea, formatPrice } from './units.js';
 import { CATEGORIES, formatKm } from './landmarks.js';
+import { formatDuration } from './routing.js';
 
 const TYPE_TH = { house: 'บ้าน', land: 'ที่ดิน' };
 
@@ -77,10 +78,50 @@ function rowMeta(p) {
  * Builds filter controls once and a rows container.
  * onSelect(id) when a row is clicked; onVisible(parcels) whenever the filtered list changes.
  */
-export function initList(root, { onSelect, onVisible, getNear, onLandmarkToggle }) {
+export function initList(root, { onSelect, onVisible, getNear, onLandmarkToggle, onRoute, onRouteAll, onClearRoutes, onEdit, routeInfo, canEdit }) {
   const opts = { type: 'all', minPrice: null, maxPrice: null, query: '', sortBy: 'created', dir: 'desc', dist: null };
   const distState = { category: '', maxKm: null };
   let all = [];
+  let expandedId = null;
+
+  const kv = (label, value) => el('div', { class: 'kv' }, el('span', { class: 'k', textContent: label }), el('span', { textContent: value }));
+
+  function detailsNode(p, near) {
+    const box = el('div', { class: 'details', onclick: (e) => e.stopPropagation() });
+    box.append(kv('ราคา', formatPrice(p.price_baht)));
+    if (p.type === 'house') {
+      box.append(kv('พื้นที่ใช้สอย', formatArea(p.usable_sqm)));
+      box.append(kv('ชั้น / นอน / น้ำ', `${p.floors ?? '-'} / ${p.bedrooms ?? '-'} / ${p.bathrooms ?? '-'}`));
+    }
+    box.append(kv(p.type === 'land' ? 'ขนาด' : 'ที่ดิน', formatArea(p.land_sqm)));
+    if (p.note) box.append(kv('หมายเหตุ', p.note));
+    if (p.source_url) {
+      const v = el('span', {});
+      if (/^https?:\/\//i.test(p.source_url)) v.append(el('a', { href: p.source_url, target: '_blank', rel: 'noopener noreferrer', textContent: 'เปิดลิงก์ต้นทาง' }));
+      else v.textContent = p.source_url;
+      box.append(el('div', { class: 'kv' }, el('span', { class: 'k', textContent: 'ลิงก์' }), v));
+    }
+    box.append(kv('เพิ่มโดย', p.added_by));
+    if (canEdit?.()) box.append(el('button', { type: 'button', textContent: 'แก้ไข', onclick: () => onEdit?.(p.id) }));
+
+    if (near && onRoute) {
+      box.append(el('div', { class: 'k routes-h', textContent: 'เส้นทางไปสถานที่ใกล้สุด (ขับรถ)' }));
+      for (const c of CATEGORIES) {
+        const n = near[c.id];
+        if (!n) continue;
+        const info = routeInfo?.(p.id, c.id);
+        const label = `${c.short}: ${n.name} · เส้นตรง ${formatKm(n.km)} กม.`;
+        box.append(el('div', { class: 'route' },
+          el('span', { class: 'dot', style: `background:${c.color}` }),
+          el('span', { class: 'rtext', textContent: label + (info ? ` · ถนน ${formatKm(info.km)} กม. ${formatDuration(info.minutes)}` : '') }),
+          el('button', { type: 'button', textContent: info?.shown ? 'ซ่อน' : 'แสดงเส้นทาง', onclick: () => onRoute(p, c.id) })));
+      }
+      box.append(el('div', { class: 'buttons' },
+        el('button', { type: 'button', textContent: 'แสดงทุกเส้นทาง', onclick: () => onRouteAll?.(p) }),
+        el('button', { type: 'button', textContent: 'ล้างเส้นทาง', onclick: () => onClearRoutes?.() })));
+    }
+    return box;
+  }
 
   const refresh = () => {
     const nearOf = (p) => (getNear ? getNear(p) : null);
@@ -93,11 +134,13 @@ export function initList(root, { onSelect, onVisible, getNear, onLandmarkToggle 
       rows.append(el('div', { class: 'empty', textContent: 'ไม่พบรายการ' }));
     }
     for (const p of visible) {
-      rows.append(el('div', { class: 'row', onclick: () => onSelect(p.id) },
-        el('div', { class: 'name', textContent: p.name }),
+      const open = expandedId === p.id;
+      rows.append(el('div', { class: `row${open ? ' open' : ''}`, onclick: () => { expandedId = open ? null : p.id; onSelect(expandedId); refresh(); } },
+        el('div', { class: 'name', textContent: `${open ? '▾' : '▸'} ${p.name}` }),
         el('div', { class: 'meta', textContent: rowMeta(p) }),
         nearLine(nearOf(p)),
-        el('div', { class: 'meta', textContent: `เพิ่มโดย ${p.added_by}` })));
+        el('div', { class: 'meta', textContent: `เพิ่มโดย ${p.added_by}` }),
+        ...(open ? [detailsNode(p, nearOf(p))] : [])));
     }
     count.textContent = `${visible.length} รายการ`;
     onVisible(visible);
@@ -135,5 +178,5 @@ export function initList(root, { onSelect, onVisible, getNear, onLandmarkToggle 
 
   root.replaceChildren(el('div', { class: 'filters' }, typeSel, sortSel, minIn, maxIn, distCat, distKm, qIn, toggles), count, rows);
 
-  return { setParcels(parcels) { all = parcels; refresh(); }, refresh };
+  return { setParcels(parcels) { all = parcels; refresh(); }, refresh, expand(id) { expandedId = id; refresh(); } };
 }

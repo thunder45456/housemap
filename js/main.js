@@ -4,7 +4,8 @@ import { initList, showGate, hideGate, toast } from './ui.js';
 import { initForm } from './form.js';
 import { renderTrash } from './trash.js';
 import { exportJson, planImport } from './importer.js';
-import { loadLandmarks, nearestByCategory } from './landmarks.js';
+import { loadLandmarks, nearestByCategory, CATEGORIES } from './landmarks.js';
+import { fetchRoute } from './routing.js';
 
 const CODE_KEY = 'housemap.code';
 const $ = (id) => document.getElementById(id);
@@ -22,6 +23,43 @@ let map = null;
 let list = null;
 let form = null;
 let landmarks = [];
+const routeCache = new Map(); // `${id}:${cat}` -> {coords,km,minutes}
+const routeShown = new Set(); // keys currently drawn
+let routeOwner = null;
+
+const colorOf = (cat) => CATEGORIES.find((c) => c.id === cat).color;
+
+function clearRoutes() {
+  routeShown.clear();
+  map?.clearRoutes();
+  list?.refresh();
+}
+
+async function toggleRoute(p, cat) {
+  const key = `${p.id}:${cat}`;
+  if (routeOwner !== p.id) { routeShown.clear(); map.clearRoutes(); routeOwner = p.id; }
+  if (routeShown.has(key)) { routeShown.delete(key); map.hideRoute(key); list.refresh(); return; }
+  const near = getNear(p)?.[cat];
+  if (!near) return;
+  try {
+    let r = routeCache.get(key);
+    if (!r) { r = await fetchRoute({ lat: p.lat, lng: p.lng }, { lat: near.lat, lng: near.lng }); routeCache.set(key, r); }
+    if (routeOwner !== p.id) return; // user moved to another parcel meanwhile
+    routeShown.add(key);
+    map.showRoute(key, r.coords, colorOf(cat));
+  } catch (e) {
+    toast(e.message);
+  }
+  list.refresh();
+}
+
+async function showAllRoutes(p) {
+  for (const c of CATEGORIES) {
+    if (!getNear(p)?.[c.id] || routeShown.has(`${p.id}:${c.id}`)) continue;
+    await toggleRoute(p, c.id);
+    await new Promise((r) => setTimeout(r, 400)); // be gentle with the free routing server
+  }
+}
 const nearCache = new Map();
 
 function getNear(p) {
@@ -63,7 +101,13 @@ function ensureApp() {
   if (map) return;
   map = initMap($('map'));
   list = initList($('list'), {
-    onSelect: (id) => map.focus(id),
+    onSelect: (id) => { if (id) map.focus(id); if (id !== routeOwner) { routeOwner = id; routeShown.clear(); map.clearRoutes(); } },
+    onRoute: toggleRoute,
+    onRouteAll: showAllRoutes,
+    onClearRoutes: clearRoutes,
+    onEdit: (id) => { const p = parcels.find((x) => x.id === id); if (p && !readOnly) { $('trash').hidden = true; form.openEdit(p); } },
+    canEdit: () => !readOnly,
+    routeInfo: (id, cat) => { const r = routeCache.get(`${id}:${cat}`); return r ? { km: r.km, minutes: r.minutes, shown: routeShown.has(`${id}:${cat}`) } : null; },
     onVisible: (visible) => map.setParcels(visible),
     getNear,
     onLandmarkToggle: (set) => map.showLandmarkCategories(set),
