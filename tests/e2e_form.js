@@ -16,7 +16,7 @@
     $('#map').dispatchEvent(new MouseEvent('mouseup', o));
     $('#map').dispatchEvent(new MouseEvent('click', o));
   };
-  const names = () => [...document.querySelectorAll('#list .row .name')].map((x) => x.textContent);
+  const names = () => [...document.querySelectorAll('#list .row .name')].map((x) => x.textContent.replace(/^[▸▾] /, ''));
   const errs = () => [...document.querySelectorAll('#form .err')].map((e) => e.textContent).filter(Boolean);
 
   // login
@@ -74,7 +74,7 @@
   out.afterDeleteRows = names();
   $('#btn-trash').click();
   await wait(300);
-  out.trashRows = [...document.querySelectorAll('#trash .row .name')].map((x) => x.textContent);
+  out.trashRows = [...document.querySelectorAll('#trash .row .name')].map((x) => x.textContent.replace(/^[▸▾] /, ''));
   [...document.querySelectorAll('#trash button')].find((b) => b.textContent === 'กู้คืน' && b.closest('.row').textContent.includes('E2E')).click();
   await wait(1800);
   out.afterRestoreRows = names();

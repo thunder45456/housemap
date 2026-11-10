@@ -135,7 +135,7 @@ export function initList(root, { onSelect, onVisible, getNear, onLandmarkToggle,
     }
     for (const p of visible) {
       const open = expandedId === p.id;
-      rows.append(el('div', { class: `row${open ? ' open' : ''}`, onclick: () => { expandedId = open ? null : p.id; onSelect(expandedId); refresh(); } },
+      rows.append(el('div', { class: `row${open ? ' open' : ''}`, onclick: () => { expandedId = open ? null : p.id; refresh(); onSelect(expandedId); } },
         el('div', { class: 'name', textContent: `${open ? '▾' : '▸'} ${p.name}` }),
         el('div', { class: 'meta', textContent: rowMeta(p) }),
         nearLine(nearOf(p)),

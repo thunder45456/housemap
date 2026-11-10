@@ -75,3 +75,5 @@ input, select, textarea { font: inherit; padding: 6px 8px; border: 1px solid var
 .route .rtext { flex: 1; }
 .route button, .details .buttons button { padding: 3px 8px; font-size: 12px; }
 .details .buttons { margin-top: 6px; }
+
+.form .meta { color: var(--muted); font-size: 13px; }

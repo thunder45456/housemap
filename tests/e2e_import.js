@@ -5,7 +5,7 @@
   const out = {};
   const code = '__CODE__';
   const api = await import('/js/api.js');
-  const names = () => [...document.querySelectorAll('#list .row .name')].map((x) => x.textContent);
+  const names = () => [...document.querySelectorAll('#list .row .name')].map((x) => x.textContent.replace(/^[▸▾] /, ''));
 
   $('#gate input').value = code;
   $('#gate form').requestSubmit();

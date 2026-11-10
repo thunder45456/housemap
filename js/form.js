@@ -61,9 +61,10 @@ export function initForm(root, deps) {
     ctl.note = el('textarea', { rows: 3 });
     ctl.by = el('input', { type: 'text', maxLength: 40 });
     ctl.loc = el('div', { class: 'meta' });
+    ctl.hint = el('div', { class: 'meta' });
     ctl.msg = el('div', { class: 'err' });
     ctl.save = el('button', { type: 'submit', class: 'primary', textContent: 'บันทึก' });
-    ctl.cancel = el('button', { type: 'button', textContent: 'ยกเลิก', onclick: close });
+    ctl.cancel = el('button', { type: 'button', textContent: 'ยกเลิก', onclick: () => { close(); deps.onFinished?.(false); } });
     ctl.del = el('button', { type: 'button', class: 'danger', textContent: 'ลบ', onclick: onDelete });
     ctl.conflict = el('button', { type: 'button', textContent: 'โหลดข้อมูลล่าสุด', hidden: true });
 
@@ -77,7 +78,7 @@ export function initForm(root, deps) {
       field('จำนวนชั้น', 'floors', ctl.floors),
       field('ห้องนอน', 'bedrooms', ctl.beds),
       field('ห้องน้ำ', 'bathrooms', ctl.baths),
-      el('div', {}, el('label', { textContent: 'ตำแหน่ง (คลิกบนแผนที่เพื่อวางหมุด แล้วลากปรับได้)' }), ctl.loc, (errEls.lat = el('div', { class: 'err' }))),
+      el('div', {}, el('label', { textContent: 'ตำแหน่ง (คลิกบนแผนที่เพื่อวางหมุด แล้วลากปรับได้)' }), ctl.loc, ctl.hint, (errEls.lat = el('div', { class: 'err' }))),
       field('ลิงก์ต้นทาง', 'source_url', ctl.url),
       field('หมายเหตุ', 'note', ctl.note),
       field('ชื่อคนเพิ่ม', 'added_by', ctl.by),
@@ -119,23 +120,25 @@ export function initForm(root, deps) {
     ctl.del.disabled = ro;
   }
 
-  function show(parcel) {
+  function show(parcel, prefill = null) {
     if (!root.firstChild) build();
     clearErrors();
     current = { parcel, lat: parcel ? parcel.lat : null, lng: parcel ? parcel.lng : null };
-    ctl.title.textContent = parcel ? 'แก้ไขรายการ' : 'เพิ่มรายการใหม่';
-    ctl.type.value = parcel?.type ?? 'house';
-    ctl.name.value = parcel?.name ?? '';
-    ctl.price.value = parcel?.price_baht ?? '';
+    const src = parcel ?? prefill?.values ?? null;
+    ctl.title.textContent = parcel ? 'แก้ไขรายการ' : prefill ? 'ตรวจรายการที่ AI อ่านให้' : 'เพิ่มรายการใหม่';
+    ctl.hint.textContent = prefill?.hint ?? '';
+    ctl.type.value = src?.type ?? 'house';
+    ctl.name.value = src?.name ?? '';
+    ctl.price.value = src?.price_baht ?? '';
     ctl.usable.unit.value = 'sqm';
     ctl.land.unit.value = 'wah';
-    setArea(ctl.usable, parcel?.usable_sqm);
-    setArea(ctl.land, parcel?.land_sqm);
-    ctl.floors.value = parcel?.floors ?? '';
-    ctl.beds.value = parcel?.bedrooms ?? '';
-    ctl.baths.value = parcel?.bathrooms ?? '';
-    ctl.url.value = parcel?.source_url ?? '';
-    ctl.note.value = parcel?.note ?? '';
+    setArea(ctl.usable, src?.usable_sqm);
+    setArea(ctl.land, src?.land_sqm);
+    ctl.floors.value = src?.floors ?? '';
+    ctl.beds.value = src?.bedrooms ?? '';
+    ctl.baths.value = src?.bathrooms ?? '';
+    ctl.url.value = src?.source_url ?? '';
+    ctl.note.value = prefill?.address ? `ที่อยู่: ${prefill.address}${src?.note ? '\n' + src.note : ''}` : (src?.note ?? '');
     ctl.by.value = parcel ? parcel.added_by : getName();
     ctl.by.disabled = !!parcel;
     ctl.del.hidden = !parcel;
@@ -145,7 +148,10 @@ export function initForm(root, deps) {
     root.hidden = false;
     root.parentElement.scrollTop = 0;
     if (parcel) deps.map.setDraft(parcel.lat, parcel.lng, (la, ln) => { current.lat = la; current.lng = ln; updateLoc(); });
-    else deps.map.clearDraft();
+    else if (prefill && prefill.lat != null) {
+      setLocation(prefill.lat, prefill.lng);
+      deps.map.view(prefill.lat, prefill.lng, 16);
+    } else deps.map.clearDraft();
   }
 
   function close() {
@@ -198,6 +204,7 @@ export function initForm(root, deps) {
       close();
       toast('บันทึกแล้ว');
       await deps.onChanged(saved.id);
+      deps.onFinished?.(true);
     } catch (e) {
       handleApiError(e);
     } finally {
@@ -220,7 +227,7 @@ export function initForm(root, deps) {
   }
 
   return {
-    openNew: () => show(null),
+    openNew: (prefill) => show(null, prefill ?? null),
     openEdit: (parcel) => show(parcel),
     close,
     isOpen: () => !!current,

@@ -6,6 +6,8 @@ import { renderTrash } from './trash.js';
 import { exportJson, planImport } from './importer.js';
 import { loadLandmarks, nearestByCategory, CATEGORIES } from './landmarks.js';
 import { fetchRoute } from './routing.js';
+import { geocode } from './geocode.js';
+import { renderAiPanel } from './aipanel.js';
 
 const CODE_KEY = 'housemap.code';
 const $ = (id) => document.getElementById(id);
@@ -22,6 +24,46 @@ let readOnly = false;
 let map = null;
 let list = null;
 let form = null;
+
+let aiQueue = [];
+let aiIndex = 0;
+
+function closeAi() {
+  $('ai').hidden = true;
+  if (!form.isOpen() && $('trash').hidden) $('list').hidden = false;
+}
+
+async function nextAi() {
+  if (aiIndex >= aiQueue.length) { aiQueue = []; toast('นำเข้าด้วย AI ครบแล้ว'); return; }
+  const item = aiQueue[aiIndex];
+  let { lat, lng } = item.values;
+  let hint = '';
+  if (lat == null && item.addressText) {
+    try {
+      const g = await geocode(item.addressText);
+      if (g) { lat = g.lat; lng = g.lng; hint = `พิกัดประมาณจากที่อยู่ (${g.label.slice(0, 80)}) ตรวจสอบและลากหมุดปรับ`; }
+      else hint = 'หาพิกัดจากที่อยู่ไม่ได้ คลิกบนแผนที่เพื่อวางหมุดเอง';
+    } catch {
+      hint = 'หาพิกัดจากที่อยู่ไม่ได้ (เชื่อมต่อไม่ได้) คลิกบนแผนที่เพื่อวางหมุดเอง';
+    }
+  } else if (lat == null) {
+    hint = 'ไม่มีที่อยู่หรือพิกัดในข้อมูล คลิกบนแผนที่เพื่อวางหมุด';
+  }
+  form.openNew({ values: item.values, address: item.addressText, lat, lng, hint: `รายการที่ ${aiIndex + 1}/${aiQueue.length}. ${hint}` });
+}
+
+function openAiPanel() {
+  if (readOnly) return;
+  form.close();
+  $('trash').hidden = true;
+  $('list').hidden = true;
+  $('ai').hidden = false;
+  renderAiPanel($('ai'), {
+    onClose: closeAi,
+    onItems: (items) => { aiQueue = items; aiIndex = 0; closeAi(); nextAi(); },
+  });
+}
+
 let landmarks = [];
 const routeCache = new Map(); // `${id}:${cat}` -> {coords,km,minutes}
 const routeShown = new Set(); // keys currently drawn
@@ -76,6 +118,7 @@ function setReadOnly(on) {
   b.textContent = on ? 'เชื่อมต่อฐานข้อมูลไม่ได้ — ดูข้อมูลล่าสุดได้อย่างเดียว (กดรีโหลดเพื่อลองใหม่)' : '';
   b.hidden = !on;
   $('btn-add').disabled = on;
+  $('btn-ai').disabled = on;
   if (form) form.refreshDisabled();
 }
 
@@ -131,11 +174,12 @@ function ensureApp() {
       else { form.close(); toast('รายการนี้ถูกลบหรือไม่มีแล้ว'); }
     },
     onNetworkError: () => setReadOnly(true),
+    onFinished: () => { if (aiQueue.length) { aiIndex++; nextAi(); } },
   });
   map.onMapClick((lat, lng) => { if (form.isOpen() && !readOnly) form.setLocation(lat, lng); });
   map.onEdit((id) => {
     const p = parcels.find((x) => x.id === id);
-    if (p && !readOnly) { $('trash').hidden = true; form.openEdit(p); }
+    if (p && !readOnly) { aiQueue = []; $('trash').hidden = true; form.openEdit(p); }
   });
   map.invalidateSize();
 }
@@ -174,6 +218,8 @@ function logout(message = '') {
   store.clear();
   code = null;
   reloadSeq++;
+  aiQueue = [];
+  $('ai').hidden = true;
   parcels = [];
   if (form) form.close();
   $('trash').hidden = true;
@@ -183,7 +229,8 @@ function logout(message = '') {
   showGate(enter, message);
 }
 
-$('btn-add').addEventListener('click', () => { $('trash').hidden = true; form.openNew(); });
+$('btn-add').addEventListener('click', () => { aiQueue = []; $('trash').hidden = true; $('ai').hidden = true; form.openNew(); });
+$('btn-ai').addEventListener('click', openAiPanel);
 $('btn-reload').addEventListener('click', async () => { if (await reload() && !$('trash').hidden) showTrash(true); });
 $('btn-trash').addEventListener('click', () => showTrash($('trash').hidden));
 $('btn-logout').addEventListener('click', () => logout());

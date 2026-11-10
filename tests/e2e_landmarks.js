@@ -13,7 +13,7 @@
   $('#gate input').value = code;
   $('#gate form').requestSubmit();
   await wait(3500);
-  const names = () => [...document.querySelectorAll('#list .row .name')].map((x) => x.textContent);
+  const names = () => [...document.querySelectorAll('#list .row .name')].map((x) => x.textContent.replace(/^[▸▾] /, ''));
   const setv = (el, v) => { el.value = v; el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); };
 
   const rowOf = (n) => [...document.querySelectorAll('#list .row')].find((r) => r.textContent.includes(n));

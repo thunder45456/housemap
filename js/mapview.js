@@ -59,21 +59,30 @@ export function initMap(el) {
   let lmItems = [];
   const routeLayers = new Map(); // key -> polyline
   let draft = null;
+  let openId = null;
+  let rebuilding = false;
 
   map.on('click', (e) => clickCb(e.latlng.lat, e.latlng.lng));
 
   return {
     invalidateSize: () => map.invalidateSize(),
+    view: (lat, lng, zoom) => map.setView([lat, lng], zoom),
     setParcels(parcels) {
+      const reopen = openId; // rebuilding markers closes popups; restore the open one afterwards
+      rebuilding = true;
       layer.clearLayers();
       markers.clear();
       for (const p of parcels) {
         const m = L.marker([p.lat, p.lng], { icon: pinIcon(p.type) });
-        m.bindPopup(() => popupNode(p, (id) => editCb(id), nearFn(p)));
+        m.bindPopup(() => popupNode(p, (id) => editCb(id), nearFn(p)), { autoPan: false });
+        m.on('popupopen', () => { openId = p.id; });
+        m.on('popupclose', () => { if (!rebuilding && openId === p.id) openId = null; });
         m.on('click', () => markerCb(p.id));
         m.addTo(layer);
         markers.set(p.id, m);
       }
+      rebuilding = false;
+      if (reopen && markers.has(reopen)) markers.get(reopen).openPopup();
     },
     focus(id) {
       const m = markers.get(id);
