@@ -1,0 +1,24 @@
+name: keepalive
+
+# Supabase free projects pause after ~7 days without activity.
+# This pings the database once a day so the shared map keeps working.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          ANON: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          curl -fsS -X POST "$SUPABASE_URL/rest/v1/rpc/ping" \
+            -H "apikey: $ANON" \
+            -H "Authorization: Bearer $ANON" \
+            -H "Content-Type: application/json" \
+            -d '{}'
