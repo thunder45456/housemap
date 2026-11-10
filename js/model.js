@@ -69,14 +69,16 @@ export function validateParcel(input) {
 const SORT_KEY = { price: 'price_baht', land: 'land_sqm', usable: 'usable_sqm', created: 'created_at' };
 
 export function filterSort(parcels, opts = {}) {
-  const { type = 'all', minPrice, maxPrice, query, sortBy = 'created', dir = 'desc' } = opts;
+  const { type = 'all', minPrice, maxPrice, query, sortBy = 'created', dir = 'desc', dist } = opts;
+  const distOn = dist && dist.category && Number.isFinite(dist.maxKm) && typeof dist.distOf === 'function';
   const q = query ? query.trim().toLowerCase() : '';
   const hit = (p) =>
     !p.deleted_at &&
     (type === 'all' || p.type === type) &&
     (minPrice == null || (p.price_baht != null && p.price_baht >= minPrice)) &&
     (maxPrice == null || (p.price_baht != null && p.price_baht <= maxPrice)) &&
-    (!q || [p.name, p.note, p.added_by].some((s) => String(s ?? '').toLowerCase().includes(q)));
+    (!q || [p.name, p.note, p.added_by].some((s) => String(s ?? '').toLowerCase().includes(q))) &&
+    (!distOn || (() => { const km = dist.distOf(p, dist.category); return km != null && km <= dist.maxKm; })());
 
   const key = SORT_KEY[sortBy] ?? 'created_at';
   const sign = dir === 'asc' ? 1 : -1;

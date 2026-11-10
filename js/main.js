@@ -4,6 +4,7 @@ import { initList, showGate, hideGate, toast } from './ui.js';
 import { initForm } from './form.js';
 import { renderTrash } from './trash.js';
 import { exportJson, planImport } from './importer.js';
+import { loadLandmarks, nearestByCategory } from './landmarks.js';
 
 const CODE_KEY = 'housemap.code';
 const $ = (id) => document.getElementById(id);
@@ -20,6 +21,16 @@ let readOnly = false;
 let map = null;
 let list = null;
 let form = null;
+let landmarks = [];
+const nearCache = new Map();
+
+function getNear(p) {
+  if (landmarks.length === 0) return null;
+  const key = `${p.id}:${p.lat}:${p.lng}`;
+  let r = nearCache.get(key);
+  if (!r) { r = nearestByCategory(p, landmarks); nearCache.set(key, r); }
+  return r;
+}
 
 function setReadOnly(on) {
   readOnly = on;
@@ -54,7 +65,15 @@ function ensureApp() {
   list = initList($('list'), {
     onSelect: (id) => map.focus(id),
     onVisible: (visible) => map.setParcels(visible),
+    getNear,
+    onLandmarkToggle: (set) => map.showLandmarkCategories(set),
   });
+  map.setNearFn(getNear);
+  loadLandmarks().then((items) => {
+    landmarks = items;
+    map.setLandmarks(items);
+    list.refresh();
+  }).catch(() => toast('โหลดข้อมูลสถานที่สำคัญไม่ได้'));
   form = initForm($('form'), {
     listRoot: $('list'),
     map,

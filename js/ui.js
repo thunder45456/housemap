@@ -1,5 +1,6 @@
 import { filterSort } from './model.js';
 import { formatArea, formatPrice } from './units.js';
+import { CATEGORIES, formatKm } from './landmarks.js';
 
 const TYPE_TH = { house: 'บ้าน', land: 'ที่ดิน' };
 
@@ -54,6 +55,12 @@ export function hideGate() {
   document.getElementById('gate').hidden = true;
 }
 
+function nearLine(near) {
+  if (!near) return document.createComment('');
+  const parts = CATEGORIES.filter((c) => near[c.id]).map((c) => `${c.short} ${formatKm(near[c.id].km)}`);
+  return el('div', { class: 'meta', textContent: parts.length ? `ใกล้: ${parts.join(' · ')} กม.` : '' });
+}
+
 function rowMeta(p) {
   const bits = [TYPE_TH[p.type] ?? p.type, formatPrice(p.price_baht)];
   if (p.type === 'house') {
@@ -70,11 +77,16 @@ function rowMeta(p) {
  * Builds filter controls once and a rows container.
  * onSelect(id) when a row is clicked; onVisible(parcels) whenever the filtered list changes.
  */
-export function initList(root, { onSelect, onVisible }) {
-  const opts = { type: 'all', minPrice: null, maxPrice: null, query: '', sortBy: 'created', dir: 'desc' };
+export function initList(root, { onSelect, onVisible, getNear, onLandmarkToggle }) {
+  const opts = { type: 'all', minPrice: null, maxPrice: null, query: '', sortBy: 'created', dir: 'desc', dist: null };
+  const distState = { category: '', maxKm: null };
   let all = [];
 
   const refresh = () => {
+    const nearOf = (p) => (getNear ? getNear(p) : null);
+    opts.dist = distState.category && distState.maxKm != null && getNear
+      ? { category: distState.category, maxKm: distState.maxKm, distOf: (p, c) => nearOf(p)?.[c]?.km ?? null }
+      : null;
     const visible = filterSort(all, opts);
     rows.replaceChildren();
     if (visible.length === 0) {
@@ -84,6 +96,7 @@ export function initList(root, { onSelect, onVisible }) {
       rows.append(el('div', { class: 'row', onclick: () => onSelect(p.id) },
         el('div', { class: 'name', textContent: p.name }),
         el('div', { class: 'meta', textContent: rowMeta(p) }),
+        nearLine(nearOf(p)),
         el('div', { class: 'meta', textContent: `เพิ่มโดย ${p.added_by}` })));
     }
     count.textContent = `${visible.length} รายการ`;
@@ -108,10 +121,19 @@ export function initList(root, { onSelect, onVisible }) {
   const maxIn = el('input', { type: 'number', min: 0, step: 'any', placeholder: 'ราคาสูงสุด (ล้านบาท)', oninput: (e) => { opts.maxPrice = million(e.target.value); refresh(); } });
   const qIn = el('input', { type: 'search', placeholder: 'ค้นหาชื่อ / หมายเหตุ / คนเพิ่ม', oninput: (e) => { opts.query = e.target.value; refresh(); } });
   qIn.className = 'wide';
+  const distCat = el('select', { onchange: (e) => { distState.category = e.target.value; refresh(); } },
+    el('option', { value: '', textContent: 'ไม่กรองตามระยะ' }),
+    ...CATEGORIES.map((c) => el('option', { value: c.id, textContent: `ใกล้${c.label}` })));
+  const distKm = el('input', { type: 'number', min: 0, step: 'any', placeholder: 'ไม่เกิน (กม.)', oninput: (e) => { const v = e.target.value.trim(); distState.maxKm = v === '' || !Number.isFinite(Number(v)) ? null : Number(v); refresh(); } });
+  const visibleCats = new Set();
+  const toggles = el('div', { class: 'wide toggles' }, el('span', { class: 'meta', textContent: 'แสดงบนแผนที่: ' }),
+    ...CATEGORIES.map((c) => el('label', { class: 'tg' },
+      el('input', { type: 'checkbox', onchange: (e) => { if (e.target.checked) visibleCats.add(c.id); else visibleCats.delete(c.id); onLandmarkToggle?.(new Set(visibleCats)); } }),
+      el('span', { class: 'dot', style: `background:${c.color}` }), ` ${c.label}`)));
   const count = el('div', { class: 'meta' });
   const rows = el('div', { class: 'rows' });
 
-  root.replaceChildren(el('div', { class: 'filters' }, typeSel, sortSel, minIn, maxIn, qIn), count, rows);
+  root.replaceChildren(el('div', { class: 'filters' }, typeSel, sortSel, minIn, maxIn, distCat, distKm, qIn, toggles), count, rows);
 
-  return { setParcels(parcels) { all = parcels; refresh(); } };
+  return { setParcels(parcels) { all = parcels; refresh(); }, refresh };
 }

@@ -1,4 +1,5 @@
 import { formatArea, formatPrice } from './units.js';
+import { CATEGORIES, formatKm } from './landmarks.js';
 
 const CHIANG_MAI = [18.7883, 98.9853];
 const TYPE_TH = { house: 'บ้าน', land: 'ที่ดิน' };
@@ -10,7 +11,7 @@ function pinIcon(kind) {
   return L.divIcon({ className: '', html: pin, iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -20] });
 }
 
-function popupNode(p, onEdit) {
+function popupNode(p, onEdit, near) {
   const box = document.createElement('div');
   const line = (text, bold) => {
     const d = document.createElement(bold ? 'strong' : 'div');
@@ -23,6 +24,15 @@ function popupNode(p, onEdit) {
   if (p.type === 'house') line(`ใช้สอย ${formatArea(p.usable_sqm)} · ที่ดิน ${formatArea(p.land_sqm)}`);
   else line(`ที่ดิน ${formatArea(p.land_sqm)}`);
   line(`เพิ่มโดย ${p.added_by}`);
+  if (near) {
+    const parts = CATEGORIES.filter((c) => near[c.id]).map((c) => `${c.short} ${formatKm(near[c.id].km)} กม. (${near[c.id].name})`);
+    if (parts.length) {
+      const d = document.createElement('div');
+      d.className = 'near';
+      parts.forEach((t) => { const r = document.createElement('div'); r.textContent = t; d.appendChild(r); });
+      box.appendChild(d);
+    }
+  }
   const b = document.createElement('button');
   b.type = 'button';
   b.textContent = 'แก้ไข';
@@ -43,6 +53,10 @@ export function initMap(el) {
   let markerCb = () => {};
   let clickCb = () => {};
   let editCb = () => {};
+  let nearFn = () => null;
+  const canvas = L.canvas({ padding: 0.3 });
+  const lmLayers = new Map(); // category -> LayerGroup
+  let lmItems = [];
   let draft = null;
 
   map.on('click', (e) => clickCb(e.latlng.lat, e.latlng.lng));
@@ -54,7 +68,7 @@ export function initMap(el) {
       markers.clear();
       for (const p of parcels) {
         const m = L.marker([p.lat, p.lng], { icon: pinIcon(p.type) });
-        m.bindPopup(() => popupNode(p, (id) => editCb(id)));
+        m.bindPopup(() => popupNode(p, (id) => editCb(id), nearFn(p)));
         m.on('click', () => markerCb(p.id));
         m.addTo(layer);
         markers.set(p.id, m);
@@ -69,6 +83,29 @@ export function initMap(el) {
     onMarkerClick: (cb) => { markerCb = cb; },
     onMapClick: (cb) => { clickCb = cb; },
     onEdit: (cb) => { editCb = cb; },
+    setNearFn: (fn) => { nearFn = fn; },
+    setLandmarks(items) {
+      lmItems = items;
+      for (const g of lmLayers.values()) map.removeLayer(g);
+      lmLayers.clear();
+    },
+    /** visible: Set of category ids to draw */
+    showLandmarkCategories(visible) {
+      for (const c of CATEGORIES) {
+        const on = visible.has(c.id);
+        let g = lmLayers.get(c.id);
+        if (on && !g) {
+          g = L.layerGroup();
+          for (const it of lmItems) {
+            if (it.t !== c.id) continue;
+            L.circleMarker([it.lat, it.lng], { renderer: canvas, radius: c.id === 'school' ? 4 : 6, color: '#fff', weight: 1, fillColor: c.color, fillOpacity: 0.9 })
+              .bindTooltip(`${c.label}: ${it.n}`).addTo(g);
+          }
+          lmLayers.set(c.id, g);
+        }
+        if (g) { if (on) g.addTo(map); else map.removeLayer(g); }
+      }
+    },
     setDraft(lat, lng, onDrag) {
       if (draft) map.removeLayer(draft);
       draft = L.marker([lat, lng], { icon: pinIcon('draft'), draggable: true }).addTo(map);
