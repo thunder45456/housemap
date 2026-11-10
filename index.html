@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HouseMap – บ้านและที่ดินที่น่าสนใจ</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E%F0%9F%8F%A0%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="gate" class="gate" hidden></div>
+<div id="app" class="app" hidden>
+  <header class="topbar">
+    <h1>HouseMap</h1>
+    <span id="banner" class="banner" hidden></span>
+    <nav class="actions">
+      <button id="btn-add" type="button">+ เพิ่มรายการ</button>
+      <button id="btn-reload" type="button">รีโหลด</button>
+      <button id="btn-trash" type="button">ถังขยะ</button>
+      <button id="btn-export" type="button">ส่งออก JSON</button>
+      <button id="btn-import" type="button">นำเข้า JSON</button>
+      <input id="file-import" type="file" accept="application/json,.json" hidden>
+      <button id="btn-logout" type="button" class="link">ออกจากระบบ</button>
+    </nav>
+  </header>
+  <main class="main">
+    <div id="map" class="map"></div>
+    <aside class="side">
+      <section id="list" class="list"></section>
+      <section id="form" class="form" hidden></section>
+      <section id="trash" class="list" hidden></section>
+    </aside>
+  </main>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
