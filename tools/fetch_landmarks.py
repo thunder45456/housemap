@@ -2,7 +2,7 @@
 
 Usage: python tools/fetch_landmarks.py
 Covers Chiang Mai + neighbouring provinces. Re-run occasionally to refresh.
-Categories: hospital, mall, airport, school, market.
+Categories: hospital, mall, airport, market.
 """
 import json
 import sys
@@ -19,7 +19,6 @@ QUERIES = {
     "hospital": 'nwr["amenity"="hospital"]',
     "mall": 'nwr["shop"~"^(mall|department_store)$"]',
     "airport": 'nwr["aeroway"="aerodrome"]["aerodrome:type"!~"military"]["iata"]',
-    "school": 'nwr["amenity"="school"]',
     "market": 'nwr["amenity"="marketplace"]',
 }
 

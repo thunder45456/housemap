@@ -7,7 +7,11 @@
   const api = await import('./js/api.js');
   const base = { source_url: 'https://example.com/listing', note: 'หมายเหตุทดสอบ', added_by: 'e2e', roof: null, facing: null, footprint_w: null, footprint_d: null,
     type: 'house', price_baht: 1000000, usable_sqm: 100, floors: 2, bedrooms: 2, bathrooms: 1, land_sqm: 200 };
-  const a = await api.saveParcel(code, { ...base, name: 'RT บ้านทดสอบ', lat: 18.7961, lng: 98.9680 }, null);
+  const rt = await import('./js/routing.js');
+  const lm = (await (await fetch('landmarks.json')).json()).items;
+  const nearA = await rt.computeNear({ lat: 18.7961, lng: 98.9680 }, lm);
+  const a = await api.saveParcel(code, { ...base, near: nearA, name: 'RT บ้านทดสอบ', lat: 18.7961, lng: 98.9680 }, null);
+  out.storedNear = !!(await api.listParcels(code)).find((x) => x.id === a.id).near;
 
   $('#gate input').value = code;
   $('#gate form').requestSubmit();

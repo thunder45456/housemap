@@ -74,3 +74,15 @@ test('geocode url and parsing', () => {
   assert.equal(parseNominatim([{ lat: 'x', lon: 'y' }]), null);
   assert.equal(parseNominatim([{ lat: '40', lon: '98' }]), null); // outside Thailand
 });
+
+test('extractItems skips junk JSON-looking bits before the real object', () => {
+  const r = extractItems('ตามประกาศ [1] และ [2, 3] นี่คือข้อมูล:\n```json\n{"name":"จริง"}\n```');
+  assert.equal(r.items[0].name, 'จริง');
+});
+
+test('extractItems does not hang on thousands of unbalanced brackets', () => {
+  const t0 = Date.now();
+  const r = extractItems('[{'.repeat(20000));
+  assert.ok(r.error);
+  assert.ok(Date.now() - t0 < 1500, 'too slow');
+});

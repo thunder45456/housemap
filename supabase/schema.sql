@@ -23,6 +23,7 @@ create table if not exists public.parcels (
   facing text check (facing in ('N','NE','E','SE','S','SW','W','NW')),
   footprint_w numeric check (footprint_w > 0),
   footprint_d numeric check (footprint_d > 0),
+  near jsonb check (near is null or (jsonb_typeof(near) = 'object' and pg_column_size(near) < 4000)),
   version int not null default 1,
   deleted_at timestamptz,
   created_at timestamptz not null default now()
@@ -67,7 +68,7 @@ begin
   perform public._check_code(p_code);
   if p_expected_version is null then
     insert into public.parcels (id, type, name, price_baht, usable_sqm, floors, bedrooms, bathrooms,
-      land_sqm, source_url, note, added_by, lat, lng, roof, facing, footprint_w, footprint_d)
+      land_sqm, source_url, note, added_by, lat, lng, roof, facing, footprint_w, footprint_d, near)
     values (
       coalesce((p_parcel->>'id')::uuid, gen_random_uuid()),
       p_parcel->>'type', p_parcel->>'name', (p_parcel->>'price_baht')::bigint,
@@ -77,7 +78,8 @@ begin
       coalesce(p_parcel->>'note', ''), p_parcel->>'added_by',
       (p_parcel->>'lat')::float8, (p_parcel->>'lng')::float8,
       p_parcel->>'roof', p_parcel->>'facing',
-      (p_parcel->>'footprint_w')::numeric, (p_parcel->>'footprint_d')::numeric)
+      (p_parcel->>'footprint_w')::numeric, (p_parcel->>'footprint_d')::numeric,
+      nullif(p_parcel->'near', 'null'::jsonb))
     returning * into r;
     return r;
   end if;
@@ -93,6 +95,7 @@ begin
     roof = p_parcel->>'roof', facing = p_parcel->>'facing',
     footprint_w = (p_parcel->>'footprint_w')::numeric,
     footprint_d = (p_parcel->>'footprint_d')::numeric,
+    near = nullif(p_parcel->'near', 'null'::jsonb),
     version = version + 1
   where id = (p_parcel->>'id')::uuid and version = p_expected_version and deleted_at is null
   returning * into r;

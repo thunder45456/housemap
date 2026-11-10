@@ -59,7 +59,7 @@ export function hideGate() {
 function nearLine(near) {
   if (!near) return document.createComment('');
   const parts = CATEGORIES.filter((c) => near[c.id]).map((c) => `${c.short} ${formatKm(near[c.id].km)}`);
-  return el('div', { class: 'meta', textContent: parts.length ? `ใกล้: ${parts.join(' · ')} กม.` : '' });
+  return el('div', { class: 'meta', textContent: parts.length ? `ระยะถนน: ${parts.join(' · ')} กม.` : '' });
 }
 
 function rowMeta(p) {
@@ -78,11 +78,12 @@ function rowMeta(p) {
  * Builds filter controls once and a rows container.
  * onSelect(id) when a row is clicked; onVisible(parcels) whenever the filtered list changes.
  */
-export function initList(root, { onSelect, onVisible, getNear, onLandmarkToggle, onRoute, onRouteAll, onClearRoutes, onEdit, routeInfo, canEdit }) {
+export function initList(root, { onSelect, onVisible, getNear, onLandmarkToggle, onRoute, onRouteAll, onClearRoutes, onEdit, onComputeNear, routeInfo, canEdit }) {
   const opts = { type: 'all', minPrice: null, maxPrice: null, query: '', sortBy: 'created', dir: 'desc', dist: null };
   const distState = { category: '', maxKm: null };
   let all = [];
   let expandedId = null;
+  let lastSig = null;
 
   const kv = (label, value) => el('div', { class: 'kv' }, el('span', { class: 'k', textContent: label }), el('span', { textContent: value }));
 
@@ -104,16 +105,20 @@ export function initList(root, { onSelect, onVisible, getNear, onLandmarkToggle,
     box.append(kv('เพิ่มโดย', p.added_by));
     if (canEdit?.()) box.append(el('button', { type: 'button', textContent: 'แก้ไข', onclick: () => onEdit?.(p.id) }));
 
+    if (!near && canEdit?.()) {
+      box.append(el('div', { class: 'routes-h' }, el('span', { class: 'k', textContent: 'ยังไม่ได้คำนวณระยะทางถนน ' }),
+        el('button', { type: 'button', textContent: 'คำนวณระยะทาง', onclick: () => onComputeNear?.(p) })));
+    }
     if (near && onRoute) {
-      box.append(el('div', { class: 'k routes-h', textContent: 'เส้นทางไปสถานที่ใกล้สุด (ขับรถ)' }));
+      box.append(el('div', { class: 'k routes-h', textContent: 'ระยะทางถนนไปสถานที่ใกล้สุด (ขับรถ)' }));
       for (const c of CATEGORIES) {
         const n = near[c.id];
         if (!n) continue;
         const info = routeInfo?.(p.id, c.id);
-        const label = `${c.short}: ${n.name} · เส้นตรง ${formatKm(n.km)} กม.`;
+        const label = `${c.short}: ${n.name} · ${formatKm(n.km)} กม. · ${formatDuration(n.min)}`;
         box.append(el('div', { class: 'route' },
           el('span', { class: 'dot', style: `background:${c.color}` }),
-          el('span', { class: 'rtext', textContent: label + (info ? ` · ถนน ${formatKm(info.km)} กม. ${formatDuration(info.minutes)}` : '') }),
+          el('span', { class: 'rtext', textContent: label }),
           el('button', { type: 'button', textContent: info?.shown ? 'ซ่อน' : 'แสดงเส้นทาง', onclick: () => onRoute(p, c.id) })));
       }
       box.append(el('div', { class: 'buttons' },
@@ -143,7 +148,8 @@ export function initList(root, { onSelect, onVisible, getNear, onLandmarkToggle,
         ...(open ? [detailsNode(p, nearOf(p))] : [])));
     }
     count.textContent = `${visible.length} รายการ`;
-    onVisible(visible);
+    const sig = visible.map((p) => `${p.id}:${p.version}:${p.lat}:${p.lng}:${p.type}`).join('|');
+    if (sig !== lastSig) { lastSig = sig; onVisible(visible); }
   };
 
   const million = (v) => (v.trim() === '' || !Number.isFinite(Number(v)) ? null : Number(v) * 1_000_000);

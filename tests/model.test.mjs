@@ -77,3 +77,17 @@ test('odd input types are rejected, not coerced', () => {
   assert.ok(validateParcel({ ...good(), price_baht: 1e30 }).errors.price_baht);
   assert.ok(validateParcel({ ...good(), land_sqm: 1e30 }).errors.land_sqm);
 });
+
+test('near is passed through only when well-formed', () => {
+  const near = { hospital: { name: 'รพ.', lat: 18.8, lng: 98.9, km: 3.2, min: 7 }, mall: null, bogus: { name: 'x' } };
+  const ok = validateParcel({ ...good(), near });
+  assert.equal(ok.ok, true);
+  assert.deepEqual(Object.keys(ok.value.near).sort(), ['airport', 'hospital', 'mall', 'market']);
+  assert.equal(ok.value.near.hospital.km, 3.2);
+  assert.equal(ok.value.near.mall, null);
+  assert.equal(validateParcel({ ...good(), near: 'junk' }).value.near, null);
+  assert.equal(validateParcel(good()).value.near, null);
+  const bad = validateParcel({ ...good(), near: { hospital: { name: 'x', lat: 1, lng: 2, km: -5, min: 1 }, mall: { name: 'ok', lat: 18, lng: 99, km: 1, min: 2 } } });
+  assert.equal(bad.value.near.hospital, null);
+  assert.equal(bad.value.near.mall.name, 'ok');
+});

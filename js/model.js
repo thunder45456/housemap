@@ -1,3 +1,5 @@
+import { CATEGORIES } from './landmarks.js';
+
 export const ROOFS = ['gable', 'hip', 'flat'];
 export const FACINGS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 export const TYPES = ['house', 'land'];
@@ -11,6 +13,21 @@ function num(v) {
   if (typeof v !== 'string' && typeof v !== 'number') return { ok: false, value: null };
   const n = typeof v === 'number' ? v : Number(String(v).trim().replace(/,/g, ''));
   return Number.isFinite(n) ? { ok: true, value: n } : { ok: false, value: null };
+}
+
+/** Keeps only well-formed road-distance entries; anything else becomes null. */
+export function cleanNear(near) {
+  if (!near || typeof near !== 'object' || Array.isArray(near)) return null;
+  const out = {};
+  for (const { id } of CATEGORIES) {
+    const e = near[id];
+    const ok = e && typeof e === 'object' && typeof e.name === 'string' && e.name.length > 0
+      && Number.isFinite(e.lat) && Number.isFinite(e.lng)
+      && Number.isFinite(e.km) && e.km >= 0 && e.km <= 5000
+      && Number.isFinite(e.min) && e.min >= 0 && e.min <= 100000;
+    out[id] = ok ? { name: e.name.slice(0, 80), lat: e.lat, lng: e.lng, km: e.km, min: e.min } : null;
+  }
+  return out;
 }
 
 export function validateParcel(input) {
@@ -61,6 +78,8 @@ export function validateParcel(input) {
   const facing = isBlank(input.facing) ? null : input.facing;
   if (facing !== null && !FACINGS.includes(facing)) errors.facing = 'ทิศไม่ถูกต้อง';
   value.facing = facing;
+
+  value.near = cleanNear(input.near);
 
   const ok = Object.keys(errors).length === 0;
   return ok ? { ok, errors, value } : { ok, errors };

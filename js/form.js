@@ -1,5 +1,5 @@
 import { el, toast } from './ui.js';
-import { validateParcel } from './model.js';
+import { validateParcel, cleanNear } from './model.js';
 import { toSqm, fromSqm } from './units.js';
 import { saveParcel, setDeleted } from './api.js';
 
@@ -64,7 +64,8 @@ export function initForm(root, deps) {
     ctl.hint = el('div', { class: 'meta' });
     ctl.msg = el('div', { class: 'err' });
     ctl.save = el('button', { type: 'submit', class: 'primary', textContent: 'บันทึก' });
-    ctl.cancel = el('button', { type: 'button', textContent: 'ยกเลิก', onclick: () => { close(); deps.onFinished?.(false); } });
+    ctl.cancel = el('button', { type: 'button', textContent: 'ยกเลิก', onclick: () => { const q = !!current?.prefill; close(); if (q) deps.onFinished?.(false); } });
+    ctl.stopQueue = el('button', { type: 'button', textContent: 'หยุดนำเข้าที่เหลือ', hidden: true, onclick: () => { close(); deps.onAbortQueue?.(); } });
     ctl.del = el('button', { type: 'button', class: 'danger', textContent: 'ลบ', onclick: onDelete });
     ctl.conflict = el('button', { type: 'button', textContent: 'โหลดข้อมูลล่าสุด', hidden: true });
 
@@ -83,7 +84,7 @@ export function initForm(root, deps) {
       field('หมายเหตุ', 'note', ctl.note),
       field('ชื่อคนเพิ่ม', 'added_by', ctl.by),
       ctl.msg, ctl.conflict,
-      el('div', { class: 'buttons' }, ctl.save, ctl.cancel, ctl.del));
+      el('div', { class: 'buttons' }, ctl.save, ctl.cancel, ctl.stopQueue, ctl.del));
     form.addEventListener('submit', onSubmit);
     root.replaceChildren(form);
   }
@@ -123,7 +124,8 @@ export function initForm(root, deps) {
   function show(parcel, prefill = null) {
     if (!root.firstChild) build();
     clearErrors();
-    current = { parcel, lat: parcel ? parcel.lat : null, lng: parcel ? parcel.lng : null };
+    current = { parcel, prefill, lat: parcel ? parcel.lat : null, lng: parcel ? parcel.lng : null };
+    ctl.stopQueue.hidden = !(prefill && deps.queueActive?.());
     const src = parcel ?? prefill?.values ?? null;
     ctl.title.textContent = parcel ? 'แก้ไขรายการ' : prefill ? 'ตรวจรายการที่ AI อ่านให้' : 'เพิ่มรายการใหม่';
     ctl.hint.textContent = prefill?.hint ?? '';
@@ -188,7 +190,7 @@ export function initForm(root, deps) {
       floors: ctl.floors.value, bedrooms: ctl.beds.value, bathrooms: ctl.baths.value,
       source_url: ctl.url.value, note: ctl.note.value, added_by: ctl.by.value,
       lat: current.lat ?? NaN, lng: current.lng ?? NaN,
-      roof: p?.roof ?? null, facing: p?.facing ?? null,
+      roof: p?.roof ?? current.prefill?.values?.roof ?? null, facing: p?.facing ?? current.prefill?.values?.facing ?? null,
       footprint_w: p?.footprint_w ?? null, footprint_d: p?.footprint_d ?? null,
     };
     const v = validateParcel(input);
@@ -198,13 +200,24 @@ export function initForm(root, deps) {
       return;
     }
     ctl.save.disabled = true;
+    const cur = current;
     try {
+      // road distances to the nearest landmarks are computed once and stored with the parcel
+      let near = p && p.lat === v.value.lat && p.lng === v.value.lng && p.near && Object.values(p.near).some(Boolean) ? p.near : null;
+      let nearFailed = false;
+      if (!near) {
+        ctl.msg.textContent = 'กำลังคำนวณระยะทางถนน...';
+        try { near = await deps.computeNear(v.value.lat, v.value.lng); } catch { near = null; nearFailed = true; }
+        ctl.msg.textContent = '';
+      }
+      v.value.near = cleanNear(near);
       const saved = await saveParcel(deps.getCode(), p ? { ...v.value, id: p.id } : v.value, p ? p.version : null);
       if (!p) setName(v.value.added_by);
-      close();
-      toast('บันทึกแล้ว');
+      const fromQueue = !!cur.prefill;
+      if (current === cur) close();
+      toast(nearFailed ? 'บันทึกแล้ว แต่ยังคำนวณระยะทางไม่ได้ (กด "คำนวณระยะทาง" ในรายละเอียดภายหลัง)' : 'บันทึกแล้ว');
       await deps.onChanged(saved.id);
-      deps.onFinished?.(true);
+      if (fromQueue) deps.onFinished?.(true);
     } catch (e) {
       handleApiError(e);
     } finally {

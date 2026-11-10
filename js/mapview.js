@@ -74,7 +74,7 @@ export function initMap(el) {
       markers.clear();
       for (const p of parcels) {
         const m = L.marker([p.lat, p.lng], { icon: pinIcon(p.type) });
-        m.bindPopup(() => popupNode(p, (id) => editCb(id), nearFn(p)), { autoPan: false });
+        m.bindPopup(() => popupNode(p, (id) => editCb(id), nearFn(p)), { autoPan: true });
         m.on('popupopen', () => { openId = p.id; });
         m.on('popupclose', () => { if (!rebuilding && openId === p.id) openId = null; });
         m.on('click', () => markerCb(p.id));
@@ -82,7 +82,13 @@ export function initMap(el) {
         markers.set(p.id, m);
       }
       rebuilding = false;
-      if (reopen && markers.has(reopen)) markers.get(reopen).openPopup();
+      if (reopen && markers.has(reopen)) {
+        const m = markers.get(reopen);
+        const pop = m.getPopup();
+        pop.options.autoPan = false; // restoring, not a user click: do not move the map
+        m.openPopup();
+        pop.options.autoPan = true;
+      } else openId = null;
     },
     focus(id) {
       const m = markers.get(id);
@@ -123,7 +129,7 @@ export function initMap(el) {
           g = L.layerGroup();
           for (const it of lmItems) {
             if (it.t !== c.id) continue;
-            L.circleMarker([it.lat, it.lng], { renderer: canvas, radius: c.id === 'school' ? 4 : 6, color: '#fff', weight: 1, fillColor: c.color, fillOpacity: 0.9 })
+            L.circleMarker([it.lat, it.lng], { renderer: canvas, radius: 6, color: '#fff', weight: 1, fillColor: c.color, fillOpacity: 0.9 })
               .bindTooltip(`${c.label}: ${it.n}`).addTo(g);
           }
           lmLayers.set(c.id, g);

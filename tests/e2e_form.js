@@ -49,6 +49,8 @@
   out.afterSave = { formHidden: $('#form').hidden, rows: names() };
   setv($('.filters select:nth-child(2)'), 'price:asc');
   out.blankPriceLast = names().slice(-1)[0];
+  const savedRow = (await api.listParcels(code)).find((p) => p.name === 'E2E บ้านทดสอบ' && !p.deleted_at);
+  out.savedWithRoadDistances = savedRow?.near ? Object.entries(savedRow.near).map(([k, v]) => `${k}:${v ? v.km : null}`) : null;
 
   // 4. conflict: open edit, another "user" bumps the version, then save
   const mine = (await api.listParcels(code)).find((p) => p.name === 'E2E บ้านทดสอบ');

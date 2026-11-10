@@ -4,8 +4,9 @@ import { initList, showGate, hideGate, toast } from './ui.js';
 import { initForm } from './form.js';
 import { renderTrash } from './trash.js';
 import { exportJson, planImport } from './importer.js';
-import { loadLandmarks, nearestByCategory, CATEGORIES } from './landmarks.js';
-import { fetchRoute } from './routing.js';
+import { loadLandmarks, CATEGORIES } from './landmarks.js';
+import { fetchRoute, computeNear } from './routing.js';
+import { cleanNear, validateParcel } from './model.js';
 import { geocode } from './geocode.js';
 import { renderAiPanel } from './aipanel.js';
 
@@ -25,8 +26,43 @@ let map = null;
 let list = null;
 let form = null;
 
+// ---- road distances (stored with each parcel as `near`) ----
+const normalize = (rows) => rows.map((p) => ({ ...p, near: cleanNear(p.near) }));
+const hasNear = (p) => !!p.near && Object.values(p.near).some(Boolean);
+const getNear = (p) => (hasNear(p) ? p.near : null);
+
+let landmarks = [];
+let landmarksReady = Promise.resolve();
+async function computeNearFor(lat, lng) {
+  await landmarksReady;
+  return computeNear({ lat, lng }, landmarks);
+}
+
+/** For parcels saved without distances (or before this feature existed). */
+async function fillNear(p) {
+  if (readOnly) return;
+  toast('กำลังคำนวณระยะทางถนน...');
+  try {
+    const near = await computeNearFor(p.lat, p.lng);
+    const v = validateParcel({ ...p, near });
+    if (!v.ok) { toast('ข้อมูลรายการไม่ครบ กรุณากดแก้ไขแล้วบันทึกใหม่'); return; }
+    await saveParcel(code, { ...v.value, id: p.id }, p.version);
+    await reload();
+    toast('คำนวณและบันทึกระยะทางแล้ว');
+  } catch (e) {
+    toast(e.code === 'conflict' ? 'มีคนอื่นแก้รายการนี้แล้ว กดรีโหลดแล้วลองใหม่' : e.message);
+  }
+}
+
+// ---- AI import queue ----
 let aiQueue = [];
 let aiIndex = 0;
+let aiToken = 0;
+
+function abortAi() {
+  aiToken++;
+  aiQueue = [];
+}
 
 function closeAi() {
   $('ai').hidden = true;
@@ -34,6 +70,7 @@ function closeAi() {
 }
 
 async function nextAi() {
+  const token = aiToken;
   if (aiIndex >= aiQueue.length) { aiQueue = []; toast('นำเข้าด้วย AI ครบแล้ว'); return; }
   const item = aiQueue[aiIndex];
   let { lat, lng } = item.values;
@@ -49,67 +86,84 @@ async function nextAi() {
   } else if (lat == null) {
     hint = 'ไม่มีที่อยู่หรือพิกัดในข้อมูล คลิกบนแผนที่เพื่อวางหมุด';
   }
+  if (token !== aiToken || !code) return; // user abandoned the import (or logged out) while we were geocoding
   form.openNew({ values: item.values, address: item.addressText, lat, lng, hint: `รายการที่ ${aiIndex + 1}/${aiQueue.length}. ${hint}` });
 }
 
 function openAiPanel() {
   if (readOnly) return;
+  abortAi();
   form.close();
   $('trash').hidden = true;
   $('list').hidden = true;
   $('ai').hidden = false;
   renderAiPanel($('ai'), {
     onClose: closeAi,
-    onItems: (items) => { aiQueue = items; aiIndex = 0; closeAi(); nextAi(); },
+    onItems: (items) => { abortAi(); aiQueue = items; aiIndex = 0; closeAi(); nextAi(); },
   });
 }
 
-let landmarks = [];
-const routeCache = new Map(); // `${id}:${cat}` -> {coords,km,minutes}
+// ---- coloured driving routes ----
+const routeCache = new Map(); // key -> {coords}
 const routeShown = new Set(); // keys currently drawn
+const routeBusy = new Set(); // keys being fetched
 let routeOwner = null;
+let routeEpoch = 0; // bump to cancel in-flight "show all" loops and stale fetches
 
 const colorOf = (cat) => CATEGORIES.find((c) => c.id === cat).color;
+const routeKey = (p, cat, n) => `${p.id}:${cat}:${p.lat},${p.lng}:${n.lat},${n.lng}`;
 
-function clearRoutes() {
+function resetRoutes(owner) {
+  routeOwner = owner;
+  routeEpoch++;
   routeShown.clear();
   map?.clearRoutes();
+}
+
+function clearRoutes() {
+  resetRoutes(routeOwner);
   list?.refresh();
 }
 
-async function toggleRoute(p, cat) {
-  const key = `${p.id}:${cat}`;
-  if (routeOwner !== p.id) { routeShown.clear(); map.clearRoutes(); routeOwner = p.id; }
-  if (routeShown.has(key)) { routeShown.delete(key); map.hideRoute(key); list.refresh(); return; }
-  const near = getNear(p)?.[cat];
-  if (!near) return;
+async function drawRoute(p, cat, epoch) {
+  const n = getNear(p)?.[cat];
+  if (!n) return;
+  const key = routeKey(p, cat, n);
+  if (routeBusy.has(key)) return;
+  routeBusy.add(key);
   try {
     let r = routeCache.get(key);
-    if (!r) { r = await fetchRoute({ lat: p.lat, lng: p.lng }, { lat: near.lat, lng: near.lng }); routeCache.set(key, r); }
-    if (routeOwner !== p.id) return; // user moved to another parcel meanwhile
+    if (!r) { r = await fetchRoute({ lat: p.lat, lng: p.lng }, { lat: n.lat, lng: n.lng }); routeCache.set(key, r); }
+    if (epoch !== routeEpoch || routeOwner !== p.id) return; // cleared or switched parcel meanwhile
     routeShown.add(key);
     map.showRoute(key, r.coords, colorOf(cat));
   } catch (e) {
     toast(e.message);
+  } finally {
+    routeBusy.delete(key);
   }
-  list.refresh();
+  list?.refresh();
+}
+
+async function toggleRoute(p, cat) {
+  if (routeOwner !== p.id) resetRoutes(p.id);
+  const n = getNear(p)?.[cat];
+  if (!n) return;
+  const key = routeKey(p, cat, n);
+  if (routeShown.has(key)) { routeShown.delete(key); map.hideRoute(key); list.refresh(); return; }
+  await drawRoute(p, cat, routeEpoch);
 }
 
 async function showAllRoutes(p) {
+  if (routeOwner !== p.id) resetRoutes(p.id);
+  const epoch = routeEpoch;
   for (const c of CATEGORIES) {
-    if (!getNear(p)?.[c.id] || routeShown.has(`${p.id}:${c.id}`)) continue;
-    await toggleRoute(p, c.id);
+    if (epoch !== routeEpoch) return; // cleared / switched while looping
+    const n = getNear(p)?.[c.id];
+    if (!n || routeShown.has(routeKey(p, c.id, n))) continue;
+    await drawRoute(p, c.id, epoch);
     await new Promise((r) => setTimeout(r, 400)); // be gentle with the free routing server
   }
-}
-const nearCache = new Map();
-
-function getNear(p) {
-  if (landmarks.length === 0) return null;
-  const key = `${p.id}:${p.lat}:${p.lng}`;
-  let r = nearCache.get(key);
-  if (!r) { r = nearestByCategory(p, landmarks); nearCache.set(key, r); }
-  return r;
 }
 
 function setReadOnly(on) {
@@ -125,6 +179,7 @@ function setReadOnly(on) {
 function showTrash(on) {
   $('trash').hidden = !on;
   if (on) {
+    abortAi();
     form.close();
     $('list').hidden = true;
     renderTrash($('trash'), parcels.filter((p) => p.deleted_at), {
@@ -139,34 +194,46 @@ function showTrash(on) {
   }
 }
 
+function editParcel(id) {
+  const p = parcels.find((x) => x.id === id);
+  if (p && !readOnly) { abortAi(); $('trash').hidden = true; form.openEdit(p); }
+}
+
 function ensureApp() {
   $('app').hidden = false;
   if (map) return;
   map = initMap($('map'));
   list = initList($('list'), {
-    onSelect: (id) => { if (id) map.focus(id); if (id !== routeOwner) { routeOwner = id; routeShown.clear(); map.clearRoutes(); } },
+    onSelect: (id) => { if (id) map.focus(id); if (id !== routeOwner) resetRoutes(id); },
     onRoute: toggleRoute,
     onRouteAll: showAllRoutes,
     onClearRoutes: clearRoutes,
-    onEdit: (id) => { const p = parcels.find((x) => x.id === id); if (p && !readOnly) { $('trash').hidden = true; form.openEdit(p); } },
+    onEdit: editParcel,
+    onComputeNear: fillNear,
     canEdit: () => !readOnly,
-    routeInfo: (id, cat) => { const r = routeCache.get(`${id}:${cat}`); return r ? { km: r.km, minutes: r.minutes, shown: routeShown.has(`${id}:${cat}`) } : null; },
+    routeInfo: (id, cat) => {
+      const p = parcels.find((x) => x.id === id);
+      const n = p && getNear(p)?.[cat];
+      return n ? { shown: routeShown.has(routeKey(p, cat, n)) } : null;
+    },
     onVisible: (visible) => map.setParcels(visible),
     getNear,
     onLandmarkToggle: (set) => map.showLandmarkCategories(set),
   });
   map.setNearFn(getNear);
-  loadLandmarks().then((items) => {
+  landmarksReady = loadLandmarks().then((items) => {
     landmarks = items;
     map.setLandmarks(items);
-    list.refresh();
-  }).catch(() => toast('โหลดข้อมูลสถานที่สำคัญไม่ได้'));
+  });
+  landmarksReady.catch(() => toast('โหลดข้อมูลสถานที่สำคัญไม่ได้'));
   form = initForm($('form'), {
     listRoot: $('list'),
     map,
     getCode: () => code,
     isReadOnly: () => readOnly,
-    onChanged: async (id) => { await reload(); if (id) map.focus(id); },
+    computeNear: computeNearFor,
+    queueActive: () => aiQueue.length > 0,
+    onChanged: async (id) => { resetRoutes(null); await reload(); if (id) map.focus(id); },
     onConflict: async (id) => {
       await reload();
       const latest = parcels.find((p) => p.id === id && !p.deleted_at);
@@ -175,12 +242,10 @@ function ensureApp() {
     },
     onNetworkError: () => setReadOnly(true),
     onFinished: () => { if (aiQueue.length) { aiIndex++; nextAi(); } },
+    onAbortQueue: () => { abortAi(); toast('หยุดนำเข้าที่เหลือแล้ว'); },
   });
   map.onMapClick((lat, lng) => { if (form.isOpen() && !readOnly) form.setLocation(lat, lng); });
-  map.onEdit((id) => {
-    const p = parcels.find((x) => x.id === id);
-    if (p && !readOnly) { aiQueue = []; $('trash').hidden = true; form.openEdit(p); }
-  });
+  map.onEdit(editParcel);
   map.invalidateSize();
 }
 
@@ -191,7 +256,7 @@ async function reload() {
   try {
     const data = await listParcels(code);
     if (seq !== reloadSeq || !code) return seq === reloadSeq && !!code; // a newer reload (or logout) superseded this one
-    parcels = data;
+    parcels = normalize(data);
     setReadOnly(false);
     list.setParcels(parcels);
     return true;
@@ -207,7 +272,7 @@ async function enter(c) {
   const data = await listParcels(c); // throws ApiError on bad code / network
   code = c;
   store.set(c);
-  parcels = data;
+  parcels = normalize(data);
   hideGate();
   ensureApp();
   setReadOnly(false);
@@ -218,7 +283,8 @@ function logout(message = '') {
   store.clear();
   code = null;
   reloadSeq++;
-  aiQueue = [];
+  abortAi();
+  resetRoutes(null);
   $('ai').hidden = true;
   parcels = [];
   if (form) form.close();
@@ -229,7 +295,7 @@ function logout(message = '') {
   showGate(enter, message);
 }
 
-$('btn-add').addEventListener('click', () => { aiQueue = []; $('trash').hidden = true; $('ai').hidden = true; form.openNew(); });
+$('btn-add').addEventListener('click', () => { abortAi(); $('trash').hidden = true; $('ai').hidden = true; form.openNew(); });
 $('btn-ai').addEventListener('click', openAiPanel);
 $('btn-reload').addEventListener('click', async () => { if (await reload() && !$('trash').hidden) showTrash(true); });
 $('btn-trash').addEventListener('click', () => showTrash($('trash').hidden));

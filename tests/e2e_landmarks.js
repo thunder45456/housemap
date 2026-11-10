@@ -7,8 +7,14 @@
   const api = await import('./js/api.js');
   const base = { source_url: '', note: '', added_by: 'e2e', roof: null, facing: null, footprint_w: null, footprint_d: null,
     type: 'house', price_baht: 1000000, usable_sqm: 100, floors: 1, bedrooms: 2, bathrooms: 1, land_sqm: 200 };
-  const a = await api.saveParcel(code, { ...base, name: 'LM ใกล้เมือง', lat: 18.7961, lng: 98.9680 }, null);
-  const b = await api.saveParcel(code, { ...base, name: 'LM ไกลเมือง', lat: 19.30, lng: 98.60 }, null);
+  const rt = await import('./js/routing.js');
+  const lm = (await (await fetch('landmarks.json')).json()).items;
+  const nearA = await rt.computeNear({ lat: 18.7961, lng: 98.9680 }, lm);
+  const nearB = await rt.computeNear({ lat: 19.30, lng: 98.60 }, lm);
+  const a = await api.saveParcel(code, { ...base, near: nearA, name: 'LM ใกล้เมือง', lat: 18.7961, lng: 98.9680 }, null);
+  const b = await api.saveParcel(code, { ...base, near: nearB, name: 'LM ไกลเมือง', lat: 19.30, lng: 98.60 }, null);
+  // a third parcel saved WITHOUT distances: details offer a button that computes and stores them
+  const c = await api.saveParcel(code, { ...base, near: null, name: 'LM ไม่มีระยะ', lat: 18.7961, lng: 98.9680 }, null);
 
   $('#gate input').value = code;
   $('#gate form').requestSubmit();
@@ -31,6 +37,15 @@
   setv(distKm, '');
   out.filterOff = names().filter((n) => n.startsWith('LM'));
   setv(distSel, '');
+  out.noNearRow = rowOf('LM ไม่มีระยะ')?.querySelectorAll('.meta')[1]?.textContent;
+  rowOf('LM ไม่มีระยะ').querySelector('.name').click();
+  await wait(500);
+  const fillBtn = [...rowOf('LM ไม่มีระยะ').querySelectorAll('.details button')].find((x) => x.textContent === 'คำนวณระยะทาง');
+  out.fillButtonShown = !!fillBtn;
+  fillBtn.click();
+  await wait(5000);
+  out.filledInDb = !!(await api.listParcels(code)).find((x) => x.id === c.id).near;
+  out.filledInRow = rowOf('LM ไม่มีระยะ')?.textContent.includes('ระยะถนน:');
 
   // popup shows nearest list
   rowOf('LM ใกล้เมือง').click();
@@ -45,7 +60,7 @@
   out.canvasPresent = document.querySelectorAll('.leaflet-overlay-pane canvas').length;
   cb[0].click(); cb[3].click();
 
-  for (const p of [a, b]) {
+  for (const p of [a, b, c]) {
     const cur = (await api.listParcels(code)).find((x) => x.id === p.id);
     await api.setDeleted(code, cur.id, true, cur.version);
   }

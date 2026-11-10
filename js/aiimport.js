@@ -32,7 +32,10 @@ export function buildPrompt() {
 }
 
 /** Finds the first balanced JSON value (object or array) in text, string-aware. */
+const STEP_BUDGET = 2_000_000; // bounds the scan on pathological pastes (thousands of unbalanced brackets)
+
 function* jsonSlices(text) {
+  let steps = 0;
   for (let i = 0; i < text.length; i++) {
     const open = text[i];
     if (open !== '{' && open !== '[') continue;
@@ -40,6 +43,7 @@ function* jsonSlices(text) {
     let inStr = false;
     let esc = false;
     for (let j = i; j < text.length; j++) {
+      if (++steps > STEP_BUDGET) return;
       const c = text[j];
       if (inStr) {
         if (esc) esc = false;
@@ -60,21 +64,26 @@ function* jsonSlices(text) {
 export function extractItems(text) {
   const src = String(text ?? '').trim();
   if (!src) return { items: [], error: 'ยังไม่ได้วางข้อความ' };
-  let data;
-  let tried = 0;
-  try {
-    data = JSON.parse(src);
-  } catch {
-    for (const s of jsonSlices(src)) {
-      if (++tried > 20) break;
-      try { data = JSON.parse(s); break; } catch { /* try next slice */ }
+  const itemsOf = (data) => {
+    const list = Array.isArray(data) ? data : Array.isArray(data?.parcels) ? data.parcels : Array.isArray(data?.items) ? data.items : [data];
+    return list.filter((x) => x && typeof x === 'object' && !Array.isArray(x)).slice(0, MAX_ITEMS);
+  };
+  let parsedAny = false;
+  const candidates = [];
+  try { candidates.push(JSON.parse(src)); parsedAny = true; } catch { /* look for embedded JSON */ }
+  if (!parsedAny) {
+    let tried = 0;
+    for (const sl of jsonSlices(src)) {
+      if (++tried > 50) break;
+      try { candidates.push(JSON.parse(sl)); parsedAny = true; } catch { /* not JSON, try the next slice */ }
     }
   }
-  if (data === undefined) return { items: [], error: 'อ่าน JSON จากข้อความไม่ได้ ลองให้ AI ตอบเป็น JSON อย่างเดียวอีกครั้ง' };
-  const list = Array.isArray(data) ? data : Array.isArray(data?.parcels) ? data.parcels : Array.isArray(data?.items) ? data.items : [data];
-  const items = list.filter((x) => x && typeof x === 'object' && !Array.isArray(x)).slice(0, MAX_ITEMS);
-  if (items.length === 0) return { items: [], error: 'ไม่พบรายการบ้านหรือที่ดินใน JSON' };
-  return { items };
+  if (!parsedAny) return { items: [], error: 'อ่าน JSON จากข้อความไม่ได้ ลองให้ AI ตอบเป็น JSON อย่างเดียวอีกครั้ง' };
+  for (const data of candidates) {
+    const items = itemsOf(data);
+    if (items.length > 0) return { items }; // first piece of JSON that actually holds listings
+  }
+  return { items: [], error: 'ไม่พบรายการบ้านหรือที่ดินใน JSON' };
 }
 
 function toNum(v) {
