@@ -45,9 +45,23 @@ test('source_url scheme', () => {
   assert.equal(validateParcel({ ...good(), source_url: '' }).ok, true);
 });
 
-test('name and added_by required', () => {
-  assert.ok(validateParcel({ ...good(), name: '  ' }).errors.name);
+test('blank name is generated, added_by required', () => {
+  const v = validateParcel({ ...good(), name: '  ', price_baht: 2390000, usable_sqm: 70 });
+  assert.ok(v.ok);
+  assert.equal(v.value.name, 'บ้าน 2.39M 70ตร.ม.');
+  assert.ok(validateParcel({ ...good(), name: 'x'.repeat(121) }).errors.name);
   assert.ok(validateParcel({ ...good(), added_by: '' }).errors.added_by);
+});
+
+test('land drops house-only fields; picks are cleaned', () => {
+  const v = validateParcel({ ...good(), type: 'land', floors: 2, bedrooms: 3, bathrooms: 1, usable_sqm: 50, garage: true });
+  assert.ok(v.ok);
+  assert.deepEqual([v.value.floors, v.value.bedrooms, v.value.bathrooms, v.value.usable_sqm, v.value.garage], [null, null, null, null, null]);
+  const pick = { id: 'school:18.8000,98.9000', c: 'school', name: 'รร.', lat: 18.8, lng: 98.9, km: 2, min: 5 };
+  const near = validateParcel({ ...good(), near: { hospital: null, picks: [pick, { ...pick, id: 'x' }, { id: 'bad' }, pick] } }).value.near;
+  assert.equal(near.picks.length, 2);
+  const routes = validateParcel({ ...good(), routes: { picks: { a: '_p~iF~ps|U', b: 'bad route!' } } }).value.routes;
+  assert.deepEqual(Object.keys(routes.picks), ['a']);
 });
 
 const P = (id, o) => ({ id, type: 'house', name: id, note: '', added_by: 'a', price_baht: null, land_sqm: null, usable_sqm: null, created_at: '2026-01-01', deleted_at: null, ...o });
@@ -72,7 +86,6 @@ test('filterSort type and query and price range', () => {
 test('odd input types are rejected, not coerced', () => {
   assert.ok(validateParcel({ ...good(), price_baht: [] }).errors.price_baht);
   assert.ok(validateParcel({ ...good(), price_baht: {} }).errors.price_baht);
-  assert.ok(validateParcel({ ...good(), name: {} }).errors.name);
   assert.ok(validateParcel({ ...good(), added_by: ['x'] }).errors.added_by);
   assert.ok(validateParcel({ ...good(), price_baht: 1e30 }).errors.price_baht);
   assert.ok(validateParcel({ ...good(), land_sqm: 1e30 }).errors.land_sqm);
@@ -90,4 +103,17 @@ test('near is passed through only when well-formed', () => {
   const bad = validateParcel({ ...good(), near: { hospital: { name: 'x', lat: 1, lng: 2, km: -5, min: 1 }, mall: { name: 'ok', lat: 18, lng: 99, km: 1, min: 2 } } });
   assert.equal(bad.value.near.hospital, null);
   assert.equal(bad.value.near.mall.name, 'ok');
+});
+
+test('picks and routes stay under the database size limits', () => {
+  const long = 'โรงเรียนอนุบาลเชียงใหม่ที่มีชื่อยาวมากมายเกินไปสำหรับการทดสอบ'.repeat(2);
+  const picks = Array.from({ length: 8 }, (_, i) => ({ id: `school:18.80${i}0,98.9000`, c: 'school', name: long, lat: 18.8, lng: 98.9, km: 2, min: 5 }));
+  const hosp = { name: long, lat: 18.8, lng: 98.9, km: 3, min: 6 };
+  const near = validateParcel({ ...good(), near: { hospital: hosp, mall: hosp, airport: hosp, market: hosp, picks } }).value.near;
+  assert.ok(new TextEncoder().encode(JSON.stringify(near)).length < 4000);
+  const enc = 'a'.repeat(8000);
+  const rp = Object.fromEntries(picks.map((k) => [k.id, enc]));
+  const routes = validateParcel({ ...good(), routes: { hospital: 'a'.repeat(20000), mall: 'a'.repeat(20000), picks: rp } }).value.routes;
+  const total = Object.values(routes).reduce((n, r) => n + (typeof r === 'string' ? r.length : 0), 0) + Object.values(routes.picks ?? {}).reduce((n, r) => n + r.length, 0);
+  assert.ok(total <= 80000);
 });

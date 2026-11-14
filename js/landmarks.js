@@ -4,6 +4,11 @@ export const CATEGORIES = [
   { id: 'airport', label: 'สนามบิน', short: 'สนามบิน', color: '#1c7ed6' },
   { id: 'market', label: 'ตลาด', short: 'ตลาด', color: '#0c8599' },
 ];
+/** Categories a parcel can pick as extra destinations (the first four are also the auto "nearest" ones). */
+export const PICK_CATEGORIES = [...CATEGORIES, { id: 'school', label: 'โรงเรียน/มหาวิทยาลัย', short: 'รร.', color: '#e8590c' }];
+export const catOf = (id) => PICK_CATEGORIES.find((c) => c.id === id) ?? null;
+export const MAX_PICKS = 8;
+export const pickId = (c, lat, lng) => `${c}:${lat.toFixed(4)},${lng.toFixed(4)}`;
 const IDS = new Set(CATEGORIES.map((c) => c.id));
 
 const R = 6371.0088;
@@ -39,4 +44,22 @@ export async function loadLandmarks(url = 'landmarks.json') {
   if (!res.ok) throw new Error(`landmarks ${res.status}`);
   const data = await res.json();
   return Array.isArray(data.items) ? data.items.filter((i) => IDS.has(i.t)) : [];
+}
+
+export async function loadSchools(url = 'schools.json') {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`schools ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data.items) ? data.items.filter((i) => i.t === 'school') : [];
+}
+
+/** Places of one category within `radiusKm` (straight line) of a point, nearest first. */
+export function withinRadius(point, items, cat, radiusKm, limit = 80) {
+  const out = [];
+  for (const it of items) {
+    if (it.t !== cat) continue;
+    const d = haversineKm(point.lat, point.lng, it.lat, it.lng);
+    if (d <= radiusKm) out.push({ ...it, straightKm: d });
+  }
+  return out.sort((a, b) => a.straightKm - b.straightKm).slice(0, limit);
 }

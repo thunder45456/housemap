@@ -4,9 +4,10 @@ import { initList, showGate, hideGate, toast } from './ui.js';
 import { initForm } from './form.js';
 import { renderTrash } from './trash.js';
 import { exportJson, planImport } from './importer.js';
-import { loadLandmarks, CATEGORIES } from './landmarks.js';
+import { loadLandmarks, loadSchools, CATEGORIES, catOf } from './landmarks.js';
+import { renderPicker } from './picker.js';
 import { fetchRoute, computeNear, computeRoutes } from './routing.js';
-import { cleanNear, cleanRoutes, validateParcel } from './model.js';
+import { cleanNear, cleanRoutes, validateParcel, hasNearCats } from './model.js';
 import { decodePolyline } from './polyline.js';
 import { geocode } from './geocode.js';
 import { loadZones, prepareZones, zoneAt, inCoverage } from './zones.js';
@@ -32,9 +33,19 @@ let form = null;
 
 // ---- road distances (stored with each parcel as `near`) ----
 const normalize = (rows) => rows.map((p) => ({ ...p, near: cleanNear(p.near), routes: cleanRoutes(p.routes) }));
-const hasRoutes = (p) => !!p.routes && Object.values(p.routes).some(Boolean);
-const hasNear = (p) => !!p.near && Object.values(p.near).some(Boolean);
-const getNear = (p) => (hasNear(p) ? p.near : null);
+const hasNear = (p) => hasNearCats(p.near);
+// extra ticked places count too: a parcel can show picks without the automatic nearest ones
+const getNear = (p) => (hasNear(p) || p.near?.picks?.length ? p.near : null);
+
+/** A destination of a parcel: an automatic nearest category ('hospital') or a ticked place ('p:<id>'). */
+function destOf(p, key) {
+  const near = getNear(p);
+  if (!near) return null;
+  if (key.startsWith('p:')) return near.picks?.find((k) => k.id === key.slice(2)) ?? null;
+  return near[key] ?? null;
+}
+const routeEnc = (p, key) => (key.startsWith('p:') ? p.routes?.picks?.[key.slice(2)] : p.routes?.[key]) ?? null;
+const destKeys = (p) => [...CATEGORIES.map((c) => c.id), ...(getNear(p)?.picks ?? []).map((k) => `p:${k.id}`)];
 
 let landmarks = [];
 let landmarksReady = Promise.resolve();
@@ -52,8 +63,10 @@ async function fillNear(p) {
   if (readOnly) return;
   toast('กำลังคำนวณ...');
   try {
-    const near = hasNear(p) ? p.near : await computeNearFor(p.lat, p.lng);
-    const routes = await computeRoutesFor(p.lat, p.lng, near);
+    let near = hasNear(p) ? p.near : await computeNearFor(p.lat, p.lng);
+    if (near !== p.near && p.near?.picks) near = { ...near, picks: p.near.picks };
+    let routes = await computeRoutesFor(p.lat, p.lng, near);
+    if (p.routes?.picks) routes = { ...routes, picks: p.routes.picks };
     const v = validateParcel({ ...p, near, routes });
     if (!v.ok) { toast('ข้อมูลรายการไม่ครบ กรุณากดแก้ไขแล้วบันทึกใหม่'); return; }
     await saveParcel(code, { ...v.value, id: p.id }, p.version);
@@ -113,6 +126,7 @@ async function nextAi() {
 
 function openAiPanel() {
   if (readOnly) return;
+  closePicker();
   setSheet('full');
   abortAi();
   form.close();
@@ -132,7 +146,7 @@ const routeBusy = new Set(); // keys being fetched
 let routeOwner = null;
 let routeEpoch = 0; // bump to cancel in-flight "show all" loops and stale fetches
 
-const colorOf = (cat) => CATEGORIES.find((c) => c.id === cat).color;
+const colorOf = (cat) => (cat.startsWith('p:') ? '#e8590c' : CATEGORIES.find((c) => c.id === cat).color);
 const routeKey = (p, cat, n) => `${p.id}:${cat}:${p.lat},${p.lng}:${n.lat},${n.lng}`;
 
 function resetRoutes(owner) {
@@ -148,21 +162,21 @@ function clearRoutes() {
 }
 
 async function drawRoute(p, cat, epoch) {
-  const n = getNear(p)?.[cat];
+  const n = destOf(p, cat);
   if (!n) return;
   const key = routeKey(p, cat, n);
   if (routeBusy.has(key)) return;
   routeBusy.add(key);
   try {
     let r = routeCache.get(key);
-    if (!r && p.routes?.[cat]) {
-      const coords = decodePolyline(p.routes[cat]);
+    if (!r && routeEnc(p, cat)) {
+      const coords = decodePolyline(routeEnc(p, cat));
       if (coords.length >= 2) { r = { coords }; routeCache.set(key, r); }
     }
     if (!r) { r = await fetchRoute({ lat: p.lat, lng: p.lng }, { lat: n.lat, lng: n.lng }); routeCache.set(key, r); } // older parcels: ask the routing server
     if (epoch !== routeEpoch || routeOwner !== p.id) return; // cleared or switched parcel meanwhile
     routeShown.add(key);
-    map.showRoute(key, r.coords, colorOf(cat));
+    map.showRoute(key, r.coords, cat.startsWith('p:') ? catOf(destOf(p, cat)?.c)?.color ?? colorOf(cat) : colorOf(cat));
   } catch (e) {
     toast(e.message);
   } finally {
@@ -173,7 +187,7 @@ async function drawRoute(p, cat, epoch) {
 
 async function toggleRoute(p, cat) {
   if (routeOwner !== p.id) resetRoutes(p.id);
-  const n = getNear(p)?.[cat];
+  const n = destOf(p, cat);
   if (!n) return;
   const key = routeKey(p, cat, n);
   if (routeShown.has(key)) { routeShown.delete(key); map.hideRoute(key); list.refresh(); return; }
@@ -183,11 +197,11 @@ async function toggleRoute(p, cat) {
 async function showAllRoutes(p) {
   if (routeOwner !== p.id) resetRoutes(p.id);
   const epoch = routeEpoch;
-  for (const c of CATEGORIES) {
+  for (const key of destKeys(p)) {
     if (epoch !== routeEpoch) return; // cleared / switched while looping
-    const n = getNear(p)?.[c.id];
-    if (!n || routeShown.has(routeKey(p, c.id, n))) continue;
-    await drawRoute(p, c.id, epoch);
+    const n = destOf(p, key);
+    if (!n || routeShown.has(routeKey(p, key, n))) continue;
+    await drawRoute(p, key, epoch);
     await new Promise((r) => setTimeout(r, 400)); // be gentle with the free routing server
   }
 }
@@ -207,6 +221,7 @@ function showTrash(on) {
   if (on) {
     setSheet('full');
     abortAi();
+    closePicker();
     form.close();
     $('list').hidden = true;
     renderTrash($('trash'), parcels.filter((p) => p.deleted_at), {
@@ -223,7 +238,61 @@ function showTrash(on) {
 
 function editParcel(id) {
   const p = parcels.find((x) => x.id === id);
-  if (p && !readOnly) { setSheet('half'); abortAi(); $('trash').hidden = true; form.openEdit(p); }
+  if (p && !readOnly) { setSheet('half'); abortAi(); closePicker(); $('trash').hidden = true; form.openEdit(p); }
+}
+
+// ---- extra destinations (ticked places) ----
+let picker = null;
+let schoolsCache = null;
+async function getPickItems(cat) {
+  if (cat === 'school') {
+    if (!schoolsCache) schoolsCache = loadSchools().catch((e) => { schoolsCache = null; throw e; });
+    return schoolsCache;
+  }
+  await landmarksReady;
+  return landmarks;
+}
+
+function closePicker() {
+  if (!picker) return;
+  picker.close?.();
+  picker = null;
+  $('pick').hidden = true;
+  resetRoutes(null);
+  if (!form.isOpen() && $('trash').hidden) $('list').hidden = false;
+}
+
+function openPicker(p) {
+  setSheet('full');
+  abortAi();
+  form.close();
+  $('trash').hidden = true;
+  $('ai').hidden = true;
+  closePicker();
+  $('list').hidden = true;
+  $('pick').hidden = false;
+  resetRoutes(p.id);
+  picker = renderPicker($('pick'), {
+    parcel: p,
+    getItems: getPickItems,
+    map,
+    canSave: () => !readOnly,
+    onSave: async (picks, routesById) => {
+      const latest = parcels.find((x) => x.id === p.id) ?? p;
+      const v = validateParcel({ ...latest, near: { ...(latest.near ?? {}), picks }, routes: { ...(latest.routes ?? {}), picks: routesById } });
+      if (!v.ok) throw new Error('ข้อมูลรายการไม่ครบ กรุณากดแก้ไขแล้วบันทึกใหม่');
+      try {
+        await saveParcel(code, { ...v.value, id: latest.id }, latest.version);
+      } catch (e) {
+        throw new Error(e.code === 'conflict' ? 'มีคนอื่นแก้รายการนี้แล้ว กดปิด รีโหลด แล้วเลือกใหม่' : e.message);
+      }
+      toast('บันทึกสถานที่ที่เลือกแล้ว');
+      closePicker();
+      await reload();
+      list.expand(latest.id);
+    },
+    onClose: () => { picker = null; $('pick').hidden = true; resetRoutes(null); if (!form.isOpen() && $('trash').hidden) $('list').hidden = false; },
+  });
 }
 
 // ---- bottom sheet (phone layout; on desktop the handle is hidden and these states have no effect) ----
@@ -250,10 +319,11 @@ function ensureApp() {
     onClearRoutes: clearRoutes,
     onEdit: editParcel,
     onComputeNear: fillNear,
+    onPick: (p) => { if (!readOnly) openPicker(p); },
     canEdit: () => !readOnly,
     routeInfo: (id, cat) => {
       const p = parcels.find((x) => x.id === id);
-      const n = p && getNear(p)?.[cat];
+      const n = p && destOf(p, cat);
       return n ? { shown: routeShown.has(routeKey(p, cat, n)) } : null;
     },
     onVisible: (visible) => map.setParcels(visible),
@@ -342,6 +412,7 @@ function logout(message = '') {
   abortAi();
   resetRoutes(null);
   $('ai').hidden = true;
+  closePicker();
   parcels = [];
   if (form) form.close();
   $('trash').hidden = true;
@@ -351,7 +422,7 @@ function logout(message = '') {
   showGate(enter, message);
 }
 
-$('btn-add').addEventListener('click', () => { setSheet('half'); abortAi(); $('trash').hidden = true; $('ai').hidden = true; form.openNew(); });
+$('btn-add').addEventListener('click', () => { setSheet('half'); abortAi(); closePicker(); $('trash').hidden = true; $('ai').hidden = true; form.openNew(); });
 $('btn-ai').addEventListener('click', openAiPanel);
 $('btn-reload').addEventListener('click', async () => { if (await reload() && !$('trash').hidden) showTrash(true); });
 $('btn-trash').addEventListener('click', () => showTrash($('trash').hidden));

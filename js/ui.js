@@ -1,4 +1,4 @@
-import { filterSort } from './model.js';
+import { filterSort, hasNearCats, hasRouteCats } from './model.js';
 import { formatPriceShort } from './units.js';
 import { infoLines, rowSummary } from './info.js';
 import { CATEGORIES } from './landmarks.js';
@@ -61,7 +61,7 @@ export function hideGate() {
  * onClearRoutes(), onEdit(id), onComputeNear(p), routeInfo(id,cat) -> {shown}|null, canEdit().
  */
 export function initList(root, h) {
-  const { onSelect, onVisible, getNear, getZone, onRoute, onRouteAll, onClearRoutes, onEdit, onComputeNear, routeInfo, canEdit } = h;
+  const { onSelect, onVisible, getNear, getZone, onRoute, onRouteAll, onClearRoutes, onEdit, onComputeNear, onPick, routeInfo, canEdit } = h;
   const opts = { type: 'all', minPrice: null, maxPrice: null, query: '', sortBy: 'created', dir: 'desc', dist: null, zone: null };
   const distState = { category: '', maxKm: null };
   const zoneState = { id: '' };
@@ -78,12 +78,11 @@ export function initList(root, h) {
     for (const l of infoLines(p, { near, zone: getZone ? getZone(p) : undefined })) {
       const line = el('div', { class: `line${l.cat ? ' route' : ''}`, title: l.title ?? '' });
       if (l.cat) {
-        const c = CATEGORIES.find((x) => x.id === l.cat);
         const shown = !!routeInfo?.(p.id, l.cat)?.shown;
-        line.append(el('span', { class: 'swatch', style: `background:${c.color}` }), el('span', { class: 't', textContent: l.text }),
+        line.append(el('span', { class: 'swatch', style: `background:${l.color}` }), el('span', { class: 't', textContent: l.text }),
           el('button', {
-            type: 'button', class: `rbtn${shown ? ' on' : ''}`, title: shown ? 'ซ่อนเส้นทาง' : 'แสดงเส้นทาง', 'aria-label': `เส้นทางไป${c.label}`,
-            style: shown ? `background:${c.color};border-color:${c.color}` : '', onclick: () => onRoute?.(p, l.cat),
+            type: 'button', class: `rbtn${shown ? ' on' : ''}`, title: shown ? 'ซ่อนเส้นทาง' : 'แสดงเส้นทาง', 'aria-label': `เส้นทางไป ${l.text}`,
+            style: shown ? `background:${l.color};border-color:${l.color}` : '', onclick: () => onRoute?.(p, l.cat),
           }, icon('route', 15)));
       } else {
         line.append(el('span', { class: 't', textContent: l.text }));
@@ -95,8 +94,9 @@ export function initList(root, h) {
     }
     const actions = el('div', { class: 'actions-row' });
     if (canEdit?.()) actions.append(el('button', { type: 'button', class: 'btn sm', onclick: () => onEdit?.(p.id) }, icon('pencil', 14), ' แก้ไข'));
-    const needsStore = !near || !p.routes || !Object.values(p.routes).some(Boolean);
-    if (needsStore && canEdit?.()) actions.append(el('button', { type: 'button', class: 'btn sm', onclick: () => onComputeNear?.(p) }, icon('calc', 14), near ? ' บันทึกเส้นทาง' : ' คำนวณระยะทาง'));
+    const needsStore = !hasNearCats(near) || !hasRouteCats(p.routes);
+    if (needsStore && canEdit?.()) actions.append(el('button', { type: 'button', class: 'btn sm', onclick: () => onComputeNear?.(p) }, icon('calc', 14), hasNearCats(near) ? ' บันทึกเส้นทาง' : ' คำนวณระยะทาง'));
+    if (onPick) actions.append(el('button', { type: 'button', class: 'btn sm', onclick: () => onPick(p) }, icon('plus', 14), ' เลือกสถานที่'));
     if (near) {
       actions.append(el('button', { type: 'button', class: 'btn sm', onclick: () => onRouteAll?.(p) }, icon('route', 14), ' ทุกเส้นทาง'));
       actions.append(el('button', { type: 'button', class: 'btn sm', onclick: () => onClearRoutes?.() }, icon('x', 14), ' ล้าง'));

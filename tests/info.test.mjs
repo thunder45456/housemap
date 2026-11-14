@@ -16,6 +16,7 @@ test('infoLines: vertical list exactly in the requested order', () => {
   const lines = infoLines(land, { near });
   assert.deepEqual(lines.map((l) => l.text), [
     'ที่ดิน ราคา ฿10,000',
+    'ราคาต่อ ตร.วา ฿100 · ต่อ ตร.ม. ฿25',
     'ที่ดิน 100 ตร.วา พื้นที่ใช้สอย 50 ตร.ม.',
     '2 ชั้น 3 ห้องนอน 2 ห้องน้ำ',
     'มีโรงรถ',

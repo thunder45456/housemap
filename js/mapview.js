@@ -60,6 +60,7 @@ export function initMap(el) {
   let lmItems = [];
   const routeLayers = new Map(); // key -> polyline
   let draft = null;
+  let candLayer = null;
   let openId = null;
   let rebuilding = false;
 
@@ -164,6 +165,20 @@ export function initMap(el) {
         }
         if (g) { if (on) g.addTo(map); else map.removeLayer(g); }
       }
+    },
+    /** Circle markers for the places listed in the picker (replaced on every call). */
+    showCandidates(items, color, label) {
+      if (candLayer) map.removeLayer(candLayer);
+      candLayer = L.layerGroup();
+      for (const it of items) {
+        L.circleMarker([it.lat, it.lng], { renderer: canvas, radius: 6, color: '#fff', weight: 1, fillColor: color, fillOpacity: 0.9 })
+          .bindTooltip(label(it)).addTo(candLayer);
+      }
+      candLayer.addTo(map);
+    },
+    clearCandidates() {
+      if (candLayer) map.removeLayer(candLayer);
+      candLayer = null;
     },
     setDraft(lat, lng, onDrag) {
       if (draft) map.removeLayer(draft);

@@ -138,3 +138,16 @@ input:focus, select:focus, textarea:focus, .btn:focus-visible { outline: 2px sol
   .fpanel { grid-template-columns: 1fr; }
   .layers { top: 8px; right: 8px; }
 }
+
+/* ---------- place picker ---------- */
+.ptabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.ptabs .swatch { margin-right: 2px; }
+.prow-ctl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
+.prows { margin: 6px 0; max-height: 46vh; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.prow { display: flex; align-items: center; gap: 8px; margin: 0 !important; padding: 7px 10px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13.5px !important; color: var(--text) !important; }
+.prow:last-child { border-bottom: 0; }
+.prow:hover { background: var(--accent-soft); }
+.prow input { width: 18px; min-height: 0; height: 18px; padding: 0; flex: none; }
+.prow .pn { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.prow .pd { display: block; font-size: var(--fs-tiny); color: var(--muted); }
+.prows .empty { padding: 18px 0; }

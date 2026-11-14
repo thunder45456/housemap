@@ -1,5 +1,5 @@
-import { CATEGORIES, formatKm } from './landmarks.js';
-import { formatArea, formatPrice, formatSqm } from './units.js';
+import { CATEGORIES, catOf, formatKm } from './landmarks.js';
+import { formatArea, formatPrice, formatSqm, ratePerUnit, formatRate } from './units.js';
 import { zoneLabel } from './zones.js';
 
 /**
@@ -12,6 +12,20 @@ export function infoLines(p, { near = null, zone } = {}) {
   const add = (key, text, extra = {}) => lines.push({ key, text, ...extra });
 
   add('price', `${p.type === 'land' ? 'ที่ดิน' : 'บ้าน'} ราคา ${p.price_baht == null ? '-' : formatPrice(p.price_baht)}`);
+
+  // the price both ways: total (above) and per area, whichever way it was typed in
+  const ppa = [];
+  if (p.type === 'land') {
+    const wah = ratePerUnit(p.price_baht, p.land_sqm, 'wah');
+    const sqm = ratePerUnit(p.price_baht, p.land_sqm, 'sqm');
+    if (wah != null) ppa.push(`ต่อ ตร.วา ${formatRate(wah)}`, `ต่อ ตร.ม. ${formatRate(sqm)}`);
+  } else {
+    const use = ratePerUnit(p.price_baht, p.usable_sqm, 'sqm');
+    const wah = ratePerUnit(p.price_baht, p.land_sqm, 'wah');
+    if (use != null) ppa.push(`ต่อ ตร.ม. ใช้สอย ${formatRate(use)}`);
+    if (wah != null) ppa.push(`ต่อ ตร.วา ที่ดิน ${formatRate(wah)}`);
+  }
+  if (ppa.length) add('ppa', `ราคา${ppa.join(' · ')}`);
 
   const area = [];
   if (p.land_sqm != null) area.push(`ที่ดิน ${formatArea(p.land_sqm)}`);
@@ -30,7 +44,11 @@ export function infoLines(p, { near = null, zone } = {}) {
   if (near) {
     for (const c of CATEGORIES) {
       const n = near[c.id];
-      if (n) add(`near-${c.id}`, `${c.label} ${formatKm(n.km)} ก.ม.`, { title: `${n.min} นาที · ${n.name}`, cat: c.id });
+      if (n) add(`near-${c.id}`, `${c.label} ${formatKm(n.km)} ก.ม.`, { title: `${n.min} นาที · ${n.name}`, cat: c.id, color: c.color });
+    }
+    for (const k of near.picks ?? []) {
+      const c = catOf(k.c);
+      if (c) add(`pick-${k.id}`, `${c.short} ${k.name} ${formatKm(k.km)} ก.ม.`, { title: `${k.min} นาที`, cat: `p:${k.id}`, color: c.color });
     }
   }
 

@@ -53,7 +53,7 @@ export function parseTable(json, count) {
   return d.map((m, i) => (m == null || t[i] == null ? null : { km: m / 1000, min: t[i] / 60 }));
 }
 
-const round1 = (n) => Math.round(n * 10) / 10;
+export const round1 = (n) => Math.round(n * 10) / 10;
 
 /** Picks the road-nearest candidate per category -> { hospital: {name,lat,lng,km,min} | null, ... } */
 export function pickNearest(cands, results) {

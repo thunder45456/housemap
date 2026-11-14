@@ -1,4 +1,5 @@
-import { CATEGORIES } from './landmarks.js';
+import { CATEGORIES, PICK_CATEGORIES, MAX_PICKS } from './landmarks.js';
+import { autoName } from './units.js';
 
 export const ROOFS = ['gable', 'hip', 'flat'];
 export const FACINGS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -15,6 +16,10 @@ function num(v) {
   return Number.isFinite(n) ? { ok: true, value: n } : { ok: false, value: null };
 }
 
+/** True when at least one of the automatic nearest-category distances is present (extra picks do not count). */
+export const hasNearCats = (near) => !!near && CATEGORIES.some((c) => near[c.id]);
+export const hasRouteCats = (routes) => !!routes && CATEGORIES.some((c) => routes[c.id]);
+
 /** Keeps only well-formed road-distance entries; anything else becomes null. */
 export function cleanNear(near) {
   if (!near || typeof near !== 'object' || Array.isArray(near)) return null;
@@ -26,6 +31,34 @@ export function cleanNear(near) {
       && Number.isFinite(e.km) && e.km >= 0 && e.km <= 5000
       && Number.isFinite(e.min) && e.min >= 0 && e.min <= 100000;
     out[id] = ok ? { name: e.name.slice(0, 80), lat: e.lat, lng: e.lng, km: e.km, min: e.min } : null;
+  }
+  const picks = cleanPicks(near.picks);
+  // the near column is limited to 4000 bytes in the database: keep the JSON (Thai = 3 bytes/char) under a safe budget
+  while (picks.length && byteLen({ ...out, picks }) > NEAR_BUDGET) picks.pop();
+  if (picks.length) out.picks = picks;
+  return out;
+}
+
+const NEAR_BUDGET = 3000;
+const ROUTES_BUDGET = 70000; // routes column limit is 80000 bytes
+const byteLen = (o) => new TextEncoder().encode(JSON.stringify(o)).length;
+
+const PICK_IDS = new Set(PICK_CATEGORIES.map((c) => c.id));
+
+/** Extra destinations the user ticked for a parcel: [{id,c,name,lat,lng,km,min}], at most MAX_PICKS. */
+export function cleanPicks(picks) {
+  if (!Array.isArray(picks)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const e of picks) {
+    const ok = e && typeof e === 'object' && typeof e.id === 'string' && e.id.length > 0 && e.id.length <= 60
+      && PICK_IDS.has(e.c) && typeof e.name === 'string' && e.name.length > 0
+      && Number.isFinite(e.lat) && Number.isFinite(e.lng)
+      && Number.isFinite(e.km) && e.km >= 0 && e.km <= 5000 && Number.isFinite(e.min) && e.min >= 0 && e.min <= 100000;
+    if (!ok || seen.has(e.id)) continue;
+    seen.add(e.id);
+    out.push({ id: e.id, c: e.c, name: e.name.slice(0, 50), lat: e.lat, lng: e.lng, km: e.km, min: e.min });
+    if (out.length >= MAX_PICKS) break;
   }
   return out;
 }
@@ -41,6 +74,19 @@ export function cleanRoutes(routes) {
     const r = routes[id];
     out[id] = typeof r === 'string' && r.length > 0 && r.length <= MAX_ROUTE_LEN && ROUTE_CHARS.test(r) ? r : null;
   }
+  if (routes.picks && typeof routes.picks === 'object' && !Array.isArray(routes.picks)) {
+    const picks = {};
+    for (const [id, r] of Object.entries(routes.picks).slice(0, MAX_PICKS)) {
+      if (typeof r === 'string' && r.length > 0 && r.length <= 8000 && ROUTE_CHARS.test(r)) picks[id.slice(0, 60)] = r;
+    }
+    // stored pick routes are optional (they are re-fetched when missing): drop the last ones when the total gets too big
+    let total = Object.values(out).reduce((n, r) => n + (typeof r === 'string' ? r.length : 0), 0);
+    for (const id of Object.keys(picks).reverse()) {
+      total += picks[id].length;
+      if (total > ROUTES_BUDGET) delete picks[id];
+    }
+    if (Object.keys(picks).length) out.picks = picks;
+  }
   return out;
 }
 
@@ -54,7 +100,7 @@ export function validateParcel(input) {
   };
 
   const name = typeof input.name === 'string' ? input.name.trim() : '';
-  if (name.length < 1 || name.length > 120) errors.name = 'กรุณากรอกชื่อ (ไม่เกิน 120 ตัวอักษร)';
+  if (name.length > 120) errors.name = 'ชื่อยาวเกิน 120 ตัวอักษร';
   value.name = name;
 
   if (!TYPES.includes(input.type)) errors.type = 'เลือกประเภท บ้าน หรือ ที่ดิน';
@@ -96,6 +142,12 @@ export function validateParcel(input) {
   value.garage = input.garage === true ? true : input.garage === false ? false : null;
   value.near = cleanNear(input.near);
   value.routes = cleanRoutes(input.routes);
+
+  if (value.type === 'land') {
+    // a plot has no rooms or floor area: never keep stale house fields
+    value.usable_sqm = null; value.floors = null; value.bedrooms = null; value.bathrooms = null; value.garage = null;
+  }
+  if (!value.name) value.name = autoName(value);
 
   const ok = Object.keys(errors).length === 0;
   return ok ? { ok, errors, value } : { ok, errors };
