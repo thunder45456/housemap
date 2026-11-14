@@ -9,6 +9,10 @@
   const db = [];
   const realFetch = window.fetch.bind(window);
   window.fetch = async (url, init) => {
+    if (String(url).includes('/functions/v1/resolve-maps-link')) {
+      if (!window.__fnOn) return new Response('{}', { status: 404 });
+      return new Response(JSON.stringify({ url: 'https://www.google.com/maps/place/x/@18.8179461,99.0632902,17z/data=!3d18.81678!4d99.063812' }), { status: 200 });
+    }
     if (!String(url).includes('supabase.co/rest/v1/rpc/')) return realFetch(url, init);
     const fn = String(url).split('/rpc/')[1];
     const a = JSON.parse(init.body);
@@ -48,8 +52,12 @@
   await wait(300);
   out.locAfterLink = $('#form .meta:not(.hint)').textContent;
   setv(locInput, 'https://maps.app.goo.gl/abc');
-  await wait(100);
-  out.shortLinkMsg = locInput.nextElementSibling.textContent.slice(0, 40);
+  await wait(1200);
+  out.shortLinkNoFn = locInput.nextElementSibling.textContent.slice(0, 30);
+  window.__fnOn = true;
+  setv(locInput, 'https://maps.app.goo.gl/abd');
+  await wait(1500);
+  out.shortLinkWithFn = locInput.nextElementSibling.textContent;
   setv(locInput, '18.7955, 98.9671');
   await wait(300);
   out.locAfterCoord = [...document.querySelectorAll('#form .meta')].map((m) => m.textContent).find((t) => /^\d+\.\d+, /.test(t));

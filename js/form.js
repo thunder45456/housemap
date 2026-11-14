@@ -2,6 +2,7 @@ import { el, toast } from './ui.js';
 import { validateParcel, cleanNear, cleanRoutes, hasNearCats, hasRouteCats } from './model.js';
 import { toSqm, fromSqm, RATE_UNITS, totalFromRate, ratePerUnit, formatRate, formatPrice } from './units.js';
 import { parseLocation, isShortMapsLink } from './gmaps.js';
+import { resolveShortLink } from './resolve.js';
 import { saveParcel, setDeleted } from './api.js';
 
 const NAME_KEY = 'housemap.name';
@@ -166,6 +167,24 @@ export function initForm(root, deps) {
     ctl.pricePreview.textContent = bits.join(' · ');
   }
 
+  let shortSeq = 0;
+  /** Short link: ask the Edge Function to follow it; if that is not possible, explain the manual way. */
+  async function resolveShort(link) {
+    const seq = ++shortSeq;
+    ctl.locMsg.textContent = 'กำลังอ่านลิงก์สั้น...';
+    await new Promise((r) => setTimeout(r, 500)); // typing a link char by char must not fire a request per key
+    if (seq !== shortSeq) return;
+    const loc = await resolveShortLink(link);
+    if (seq !== shortSeq || !current || ctl.locText.value.trim() !== link) return; // text changed or form closed meanwhile
+    if (loc) {
+      ctl.locMsg.textContent = `ใช้พิกัด ${loc.lat}, ${loc.lng} (จากลิงก์สั้น)`;
+      setLocation(loc.lat, loc.lng);
+      deps.map.view(loc.lat, loc.lng, 16);
+    } else {
+      ctl.locMsg.textContent = 'อ่านลิงก์สั้นไม่ได้: เปิดลิงก์ในเบราว์เซอร์ก่อน แล้วคัดลอกลิงก์ยาวจากแถบที่อยู่มาวาง หรือคัดลอกพิกัดที่ Google แสดง (เช่น 18.8168, 99.0638)';
+    }
+  }
+
   /** Coordinates typed or pasted (or a long Google Maps link) place the pin. No GPS involved. */
   function applyLocText(final) {
     const t = ctl.locText.value;
@@ -178,7 +197,7 @@ export function initForm(root, deps) {
       setLocation(loc.lat, loc.lng);
       deps.map.view(loc.lat, loc.lng, 16);
     } else if (isShortMapsLink(t)) {
-      ctl.locMsg.textContent = 'ลิงก์สั้น (maps.app.goo.gl) ไม่มีพิกัดในตัวลิงก์: เปิดลิงก์ในเบราว์เซอร์ก่อน แล้วคัดลอกลิงก์ยาวจากแถบที่อยู่มาวาง หรือกดค้างที่หมุดใน Google Maps แล้วคัดลอกพิกัด';
+      resolveShort(t.trim());
     } else if (final) {
       ctl.locMsg.textContent = 'อ่านพิกัดจากข้อความนี้ไม่ได้ ลองรูปแบบ 18.7961, 98.968';
     }
