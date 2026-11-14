@@ -35,3 +35,13 @@ test('rate maths', () => {
   assert.equal(totalFromRate(1000000, 1600, 'rai'), 1000000);
   assert.equal(totalFromRate(5, 0, 'sqm'), null);
 });
+
+test('degrees-minutes-seconds and the long link from a short-link redirect', () => {
+  const d = parseLocation('18°49\'00.4"N 99°03\'49.7"E');
+  assert.ok(Math.abs(d.lat - 18.816778) < 1e-5 && Math.abs(d.lng - 99.063806) < 1e-5);
+  const l = parseLocation("https://www.google.com/maps/place/18%C2%B049'00.4%22N+99%C2%B003'49.7%22E/@18.8179461,99.0632902,17.25z/data=!4m4!3m3!8m2!3d18.81678!4d99.063812?entry=ttu&g_ep=EgoyMDI2MTExMC4wIKXMDSoASAFQAw%3D%3D");
+  assert.deepEqual(l, { lat: 18.81678, lng: 99.063812 });
+  assert.deepEqual(parseLocation("https://www.google.com/maps/place/18%C2%B049'00.4%22N+99%C2%B003'49.7%22E/"), parseLocation('18°49\'00.4"N 99°03\'49.7"E'));
+  assert.equal(parseLocation('18°49\'00.4"N'), null);
+  assert.ok(parseLocation('99°03\'49.7"E 18°49\'00.4"N').lat > 18);
+});
